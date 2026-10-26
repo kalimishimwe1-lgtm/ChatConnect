@@ -52,6 +52,50 @@
                 <input type="text" placeholder="Search contacts..." />
             </div>
             <div id="contacts">
+                <% if (groupSuccess) { %>
+                    <p class="group-notice"><%= groupSuccess %></p>
+                <% } %>
+                <% if (groupError) { %>
+                    <p class="group-notice group-error"><%= groupError %></p>
+                <% } %>
+                <section class="group-section">
+                    <h2>Private groups</h2>
+                    <ul id="group-list">
+                        <% groups.forEach(function (group) { %>
+                            <li class="contact group-contact"
+                                data-group-id="<%= group.id %>"
+                                data-group-name="<%= group.name %>"
+                                role="button"
+                                tabindex="0">
+                                <div class="wrap">
+                                    <span class="group-avatar"><i class="fa fa-users" aria-hidden="true"></i></span>
+                                    <div class="meta">
+                                        <p class="name"><%= group.name %></p>
+                                        <p class="preview">Private group</p>
+                                    </div>
+                                </div>
+                            </li>
+                        <% }) %>
+                    </ul>
+                    <details class="create-group">
+                        <summary>Create a private group</summary>
+                        <form method="post" action="/groups">
+                            <label for="group-name">Group name</label>
+                            <input id="group-name" name="name" type="text" maxlength="60" required />
+                            <fieldset>
+                                <legend>Choose people to add</legend>
+                                <% contacts.forEach(function (contact) {
+                                    if (contact.contactNo !== user.contactNo) { %>
+                                        <label class="group-member-option">
+                                            <input type="checkbox" name="memberIds" value="<%= contact.id %>" />
+                                            <span><%= contact.name %></span>
+                                        </label>
+                                <% } }) %>
+                            </fieldset>
+                            <button type="submit">Create group</button>
+                        </form>
+                    </details>
+                </section>
                 <ul>
                     <% if (typeof contacts !== 'undefined' && contacts.length > 0) { 
                         for (contact of contacts) { 
@@ -70,10 +114,6 @@
                 </ul>
             </div>
             <div id="bottom-bar">
-                <button id="joinroom">
-                    <i class="fa fa-home fa-fw" aria-hidden="true"></i> 
-                    <span>Room</span>
-                </button>
 				<button onclick="logout()">
 					<i class="fa fa-sign-out fa-fw" aria-hidden="true"></i>
 					<span>Logout</span>

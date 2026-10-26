@@ -39,6 +39,45 @@ const initializeDatabase = async () => {
             datetime TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_groups (
+            id BIGSERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_group_members (
+            group_id BIGINT NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id)
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS chat_group_members_user_id_idx
+        ON chat_group_members (user_id, group_id)
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_group_messages (
+            id BIGSERIAL PRIMARY KEY,
+            group_id BIGINT NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+            sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type TEXT NOT NULL DEFAULT 'text',
+            message TEXT NOT NULL,
+            datetime TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS chat_group_messages_group_datetime_idx
+        ON chat_group_messages (group_id, datetime)
+    `);
 };
 
 module.exports = { pool, initializeDatabase };

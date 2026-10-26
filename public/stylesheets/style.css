@@ -357,6 +357,166 @@ body {
     outline: none;
     background: #435f7a;
 }
+
+#frame #sidepanel #contacts .group-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid #435f7a;
+}
+
+#frame #sidepanel #contacts .group-section h2 {
+    margin: 0 0 8px;
+    color: #d8e1e8;
+    font-size: 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+#frame #sidepanel #contacts .group-contact .group-avatar {
+    position: static;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-right: 10px;
+    border-radius: 50%;
+    border: 0;
+    background: #435f7a;
+    color: #fff;
+    float: left;
+}
+
+#frame #sidepanel #contacts .create-group {
+    margin: 8px 0;
+    color: #f5f5f5;
+}
+
+#frame #sidepanel #contacts .create-group summary {
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+#frame #sidepanel #contacts .create-group form {
+    padding: 10px 0;
+}
+
+#frame #sidepanel #contacts .create-group form > label,
+#frame #sidepanel #contacts .create-group legend {
+    display: block;
+    margin: 8px 0 4px;
+    color: #d8e1e8;
+    font-size: 0.85em;
+}
+
+#frame #sidepanel #contacts .create-group input[type="text"] {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 7px;
+    border: 1px solid #435f7a;
+    border-radius: 3px;
+}
+
+#frame #sidepanel #contacts .create-group fieldset {
+    max-height: 140px;
+    margin: 8px 0;
+    overflow-y: auto;
+    border: 0;
+}
+
+#frame #sidepanel #contacts .create-group .group-member-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    color: #f5f5f5;
+    font-size: 0.9em;
+}
+
+#frame #sidepanel #contacts .create-group button {
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 3px;
+    background: #27ae60;
+    color: white;
+    cursor: pointer;
+}
+
+#frame #sidepanel #contacts .group-notice {
+    margin: 8px;
+    color: #a8f0c6;
+    font-size: 0.9em;
+}
+
+#frame #sidepanel #contacts .group-notice.group-error {
+    color: #ffb3a7;
+}
+
+#frame #sidepanel #bottom-bar button {
+    width: 100%;
+}
+
+@media screen and (max-width: 735px) {
+    #frame #sidepanel #contacts .group-section h2 {
+        display: none;
+    }
+
+    #frame #sidepanel #contacts .create-group summary {
+        width: 36px;
+        height: 36px;
+        overflow: hidden;
+        color: transparent;
+        font-size: 0;
+    }
+
+    #frame #sidepanel #contacts .create-group summary::before {
+        content: "+";
+        display: block;
+        color: #f5f5f5;
+        font-size: 24px;
+        text-align: center;
+    }
+
+    #frame #sidepanel #contacts .create-group[open] {
+        position: fixed;
+        z-index: 100;
+        top: 70px;
+        left: 58px;
+        width: min(260px, calc(100vw - 70px));
+        padding: 10px;
+        background: #2c3e50;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+
+    #frame #sidepanel #contacts .create-group[open] summary {
+        width: auto;
+        height: auto;
+        color: #f5f5f5;
+        font-size: 0.9em;
+    }
+
+    #frame #sidepanel #contacts .create-group[open] summary::before {
+        display: none;
+    }
+}
+
+#frame .content .contact-profile.group-chat img {
+    display: none;
+}
+
+#frame .content .contact-profile.group-chat::before {
+    content: "\f0c0";
+    display: block;
+    float: left;
+    width: 40px;
+    height: 40px;
+    margin: 9px 12px 0 9px;
+    border-radius: 50%;
+    background: #435f7a;
+    color: #fff;
+    font-family: FontAwesome;
+    line-height: 40px;
+    text-align: center;
+}
 #frame #sidepanel #search {
     border-top: 1px solid #32465a;
     border-bottom: 1px solid #32465a;
@@ -756,4 +916,19 @@ body {
 }
 #frame .content .message-input .wrap button:focus {
     outline: none;
+}
+
+#frame #sidepanel #contacts ul li.contact .wrap .group-avatar {
+    position: static;
+    left: auto;
+    width: 40px;
+    height: 40px;
+    margin: 0 10px 0 0;
+    border: 0;
+    background: #435f7a;
+    color: #fff;
+}
+
+#frame #sidepanel #bottom-bar button {
+    width: 100%;
 }

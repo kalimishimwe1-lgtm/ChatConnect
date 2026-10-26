@@ -1,160 +1,210 @@
 const socket = io();
+const currentContactNo = $("#sidepanel #profile #expanded input").val();
+let activeChat = null;
+let docHeight = $(document).height();
+const displayedMessageIds = new Set();
 
-socket.on('connect', () => {
-	const from = $("#sidepanel #profile #expanded input").val();
-	socket.emit('addPhoneNumber', from);
-});
-
-var docHeight = $(document).height();
-
-function loadChats() {
-    const from = $("#sidepanel #profile #expanded input").val();
-    let to = $(".contact-profile .small.text.d-block").text();
-
-    socket.emit('load-message', {from, to}, (data) => {
-        for (chat of data) {
-            let formattedTime = moment(chat.datetime).format('hh:mm A');
-
-            if (from == chat.from) {
-                if (chat.type === "image") {
-                    displayImageMessage('replies', chat.img, chat.message);
-                } else {
-                    displayMessage('replies', chat.img, chat.message, formattedTime);
-                    $('#contacts .contact .wrap .meta #' + chat.to).html('<span>You: </span>' + chat.message);
-                }
-            } else {
-                if (chat.type === "image") {
-                    displayImageMessage('sent', chat.img, chat.message);
-                } else {
-                    displayMessage('sent', chat.img, chat.message, formattedTime);
-                    $(`#${chat.from}`).html('<span></span>' + chat.message);
-                }
-            }
-            docHeight += 93
-        }
-
-        $(".messages").animate({ scrollTop: docHeight }, "fast");
-    });
+function scrollToLatestMessage() {
+    $(".messages").animate({ scrollTop: docHeight }, "fast");
 }
 
-function displayMessage (mode,imgSrc, message, time) {
-    let newMessage = $(
-        `<li class="${mode}">
-            <img src="${imgSrc}" alt="" />
-            <p>${message}
-                <span class="float-right small text ml-2">${time}</span>
-            </p>
-        </li>`
-    );
-    // Append the new message to the messages list
-    newMessage.appendTo($('.messages ul'));
+function displayMessage(mode, imgSrc, message, time) {
+    const item = $("<li>").addClass(mode);
+    const avatar = $("<img>").attr("src", imgSrc || "").attr("alt", "");
+    const content = $("<p>").text(message);
+    const timestamp = $("<span>")
+        .addClass("float-right small text ml-2")
+        .text(time);
+
+    content.append(timestamp);
+    item.append(avatar, content).appendTo($(".messages ul"));
+    docHeight += 93;
 }
 
 function displayImageMessage(mode, userImg, imageUrl) {
-    var messageContainer = $(".messages ul");
+    const item = $("<li>").addClass(mode);
+    item.append(
+        $("<img>").attr("src", userImg || "").attr("alt", ""),
+        $("<img>")
+            .attr("src", imageUrl)
+            .attr("alt", "Shared image")
+            .addClass("message-image")
+    );
+    item.appendTo($(".messages ul"));
+    docHeight += 93;
+}
 
-    var messageHtml = `
-        <li class="${mode}">
-            <img src="${userImg}" alt="" />
-            <img src="${imageUrl}" alt="" class="message-image" />
-        </li>
-    `;
-    messageContainer.append(messageHtml);
+function showMessage(message) {
+    if (message.id !== undefined && activeChat) {
+        const chatId = activeChat.type === "group"
+            ? activeChat.id
+            : activeChat.contactNo;
+        const messageId = `${activeChat.type}:${chatId}:${message.id}`;
+        if (displayedMessageIds.has(messageId)) return;
+        displayedMessageIds.add(messageId);
+    }
+
+    const formattedTime = moment(message.datetime).format("hh:mm A");
+    const mode = message.from === currentContactNo ? "replies" : "sent";
+    if (message.type === "image") {
+        displayImageMessage(mode, message.img, message.message);
+    } else {
+        displayMessage(mode, message.img, message.message, formattedTime);
+    }
+}
+
+function loadChats() {
+    if (!activeChat) return;
+
+    const requestedChat = { ...activeChat };
+    const details = requestedChat.type === "group"
+        ? { groupId: requestedChat.id }
+        : { to: requestedChat.contactNo };
+
+    socket.emit("load-message", details, (messages) => {
+        if (
+            !activeChat ||
+            activeChat.type !== requestedChat.type ||
+            (requestedChat.type === "group"
+                ? activeChat.id !== requestedChat.id
+                : activeChat.contactNo !== requestedChat.contactNo) ||
+            !Array.isArray(messages)
+        ) {
+            return;
+        }
+
+        messages.forEach(showMessage);
+        scrollToLatestMessage();
+    });
+}
+
+socket.on("connect", () => {
+    if (activeChat) loadChats();
+});
+
+function showUserInMainPanel(user) {
+    if (!user || !user.contactNo) return;
+
+    activeChat = { type: "direct", contactNo: String(user.contactNo) };
+    toggleSelectChatMessage(false);
+    $(".contact-profile").removeClass("group-chat");
+    $(".contact-profile img").attr("src", user.img || "");
+    $(".contact-profile .name").text(user.name);
+    $(".contact-profile .small.text.d-block").text(user.contactNo);
+    $(".messages ul").empty();
+    displayedMessageIds.clear();
+    docHeight = 0;
+    loadChats();
+}
+
+function showGroupInMainPanel(group) {
+    activeChat = { type: "group", id: String(group.id), name: group.name };
+    toggleSelectChatMessage(false);
+    $(".contact-profile").addClass("group-chat");
+    $(".contact-profile .name").text(group.name);
+    $(".contact-profile .small.text.d-block").text("Private group");
+    $(".messages ul").empty();
+    displayedMessageIds.clear();
+    docHeight = 0;
+    loadChats();
 }
 
 function sendMessage(imageData) {
-    let message = $(".message-input input").val();
-    let sendTo = $(".contact-profile .small.text.d-block").text();
-    const from = $("#sidepanel #profile #expanded input").val();
-    let img = $("#profile-img").attr("src");
-    let data;
-    
-	if($.trim(sendTo) == '') {
-        sendTo = "room-"+$(".contact-profile .name.mt-2").text();
-	}
-    
-	if($.trim(message) == '' && imageData === null) {
-        return false;
-	}
+    if (!activeChat) return false;
 
-    if (imageData === null) {
-        data = {
-            "from": from,
-            "to": sendTo,
-            "img": img,
-            "type": "text",
-            "message": message,
-            datetime: new Date()
-        }
+    const input = $(".message-input input");
+    const text = input.val();
+    const message = imageData === null ? text : imageData;
+    if (!message || (imageData === null && !$.trim(message))) return false;
+
+    const data = {
+        type: imageData === null ? "text" : "image",
+        message,
+    };
+    if (activeChat.type === "group") {
+        data.groupId = activeChat.id;
     } else {
-        data = {
-            "from": from,
-            "to": sendTo,
-            "img": img,
-            "type": "image",
-            "message": imageData,
-            datetime: new Date()
-        }
+        data.to = activeChat.contactNo;
     }
+    const sentChat = { ...activeChat };
 
-    socket.emit("send-message", data)
-
-    if (imageData === null) displayMessage('replies', img, data.message, moment(data.datetime).format('hh:mm A'));
-
-	$('.message-input input').val(null);
-	
-    if (data.to && !data.to.startsWith("room-")) {
-		$('#contacts .contact .wrap .meta #'+data.to).html('<span>You: </span>' + data.message);
-	}
-    docHeight += 93
-    $(".messages").animate({ scrollTop: docHeight }, "fast");
-};
-
-function receiveMessage(data) {
-    let imgSrc = data.img
-    let formattedTime = moment(data.datetime).format('hh:mm A');
-	let check = $(".contact-profile .small.text.d-block").text();
-    
-    if(check === data.from || data.to.startsWith("room-")) {
-        if (data.type === "image") {
-            displayImageMessage('sent', imgSrc , data.message)
-        } else {
-            displayMessage('sent', imgSrc, data.message, formattedTime);
+    socket.emit("send-message", data, (result) => {
+        if (!result || !result.ok) {
+            if (imageData === null && !input.val()) input.val(text);
+            window.alert(result && result.message
+                ? result.message
+                : "The message could not be sent.");
+            return;
         }
-	}
 
-	if (data.to && !data.to.startsWith("room-") && data.type === 'text') {
-		$(`#${data.from}`).html('<span></span>' + data.message);
-	}
-    docHeight += 93
-    $(".messages").animate({ scrollTop: docHeight }, "fast");
-};
+        const stillViewingSentChat = activeChat &&
+            activeChat.type === sentChat.type &&
+            (sentChat.type === "group"
+                ? activeChat.id === sentChat.id
+                : activeChat.contactNo === sentChat.contactNo);
+        if (stillViewingSentChat) {
+            showMessage({
+                ...result.message,
+                from: currentContactNo,
+            });
+            scrollToLatestMessage();
+        }
+        if (data.to && data.type === "text") {
+            $("#contacts .contact .meta .preview")
+                .filter(function () { return this.id === data.to; })
+                .text(`You: ${data.message}`);
+        }
+    });
 
-$("#joinroom").on('click', () => {
-    const roomName = prompt("Enter Room name:")
-    if ($.trim(roomName) == '') {
-        return false;
-    }
-
-    toggleSelectChatMessage(false)
-
-    $(".contact-profile img").attr("src", "https://png.pngtree.com/png-clipart/20190921/original/pngtree-group-chat-icon-png-image_4763828.jpg");
-    $(".contact-profile p .name").text(roomName).addClass("mt-2");
-    $(".contact-profile p .small.text.d-block.mt-3").text('') // Hide the phone number
-    $(".messages ul").empty();
-
-    socket.emit('join-room', roomName)
-});
-
-$('.submit').click(function() {
-    sendMessage(null);
-});
-
-$(window).on('keydown', function(e) {
-  if (e.which == 13) {
-    sendMessage(null);
+    if (imageData === null) input.val(null);
+    scrollToLatestMessage();
     return false;
-  }
+}
+
+function receiveMessage(message) {
+    if (!activeChat) return;
+
+    if (activeChat.type === "group") {
+        if (String(message.groupId) !== activeChat.id) return;
+    } else if (message.to !== currentContactNo || message.from !== activeChat.contactNo) {
+        return;
+    }
+
+    showMessage(message);
+    scrollToLatestMessage();
+}
+
+function logout() {
+    window.location.href = `${window.location.origin}/logout`;
+}
+
+function selectFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => sendMessage(loadEvent.target.result);
+    reader.readAsDataURL(file);
+    event.target.value = "";
+}
+
+$("#group-list").on("click keydown", ".group-contact", function (event) {
+    if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") {
+        return;
+    }
+    event.preventDefault();
+    showGroupInMainPanel({
+        id: this.dataset.groupId,
+        name: this.dataset.groupName,
+    });
 });
 
-socket.on('receive-message', (data) => receiveMessage(data))
+$(".submit").on("click", () => sendMessage(null));
+$(".message-input input").on("keydown", (event) => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        sendMessage(null);
+    }
+});
+socket.on("receive-message", receiveMessage);
+socket.on("message-error", (message) => window.alert(message));

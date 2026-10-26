@@ -27,23 +27,22 @@ app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok", uptime: process.uptime() });
 });
 
-app.use(
-    session({
-        secret: SECRET,
-        resave: false,
-        saveUninitialized: false,
-        store: new PgSession({
-            pool,
-            tableName: "user_sessions",
-            createTableIfMissing: true,
-        }),
-        cookie: {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-        },
-    })
-);
+const sessionMiddleware = session({
+    secret: SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: new PgSession({
+        pool,
+        tableName: "user_sessions",
+        createTableIfMissing: true,
+    }),
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+    },
+});
+app.use(sessionMiddleware);
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -58,7 +57,7 @@ const startServer = async () => {
         await pool.query("SELECT 1");
         console.log("Connected to PostgreSQL.");
 
-        require("./socket/socketHandler")(server);
+        require("./socket/socketHandler")(server, sessionMiddleware);
         server.listen(port, "0.0.0.0", () => {
             console.log(`Listening on the port ${port}...`);
         });

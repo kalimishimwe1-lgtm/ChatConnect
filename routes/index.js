@@ -48,9 +48,62 @@ router.post("/register", async (req, res, next) => {
 });
 
 router.get("/index", async (req, res, next) => {
-    const user = req.user;
-    const usersData = await sobj.fetchAllUser()
-    res.render("index", { user: user, contacts: usersData });
+    try {
+        const user = req.user;
+        const [usersData, groups] = await Promise.all([
+            sobj.fetchAllUser(),
+            sobj.fetchGroupsForUser(user.id),
+        ]);
+        res.render("index", {
+            user,
+            contacts: usersData,
+            groups,
+            groupSuccess: req.flash("groupSuccess")[0],
+            groupError: req.flash("groupError")[0],
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post("/groups", async (req, res, next) => {
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const submittedIds = req.body.memberIds === undefined
+        ? []
+        : Array.isArray(req.body.memberIds)
+            ? req.body.memberIds
+            : [req.body.memberIds];
+    const creatorId = String(req.user.id);
+    const memberIds = [...new Set(submittedIds.map(String))]
+        .filter((id) => id !== creatorId);
+
+    if (name.length < 1 || name.length > 60) {
+        req.flash("groupError", "Group names must be between 1 and 60 characters.");
+        return res.redirect("/index");
+    }
+
+    if (
+        memberIds.length < 1 ||
+        memberIds.length > 100 ||
+        memberIds.some((id) => !/^[1-9]\d*$/.test(id))
+    ) {
+        req.flash("groupError", "Choose at least one valid member for your group.");
+        return res.redirect("/index");
+    }
+
+    try {
+        const existingIds = await sobj.fetchUsersByIds(memberIds);
+        if (existingIds.length !== memberIds.length) {
+            req.flash("groupError", "One or more selected members no longer exist.");
+            return res.redirect("/index");
+        }
+
+        await sobj.createGroup(name, creatorId, memberIds);
+        req.flash("groupSuccess", `Group "${name}" was created.`);
+        res.redirect("/index");
+    } catch (error) {
+        next(error);
+    }
 });
 
 router.post(

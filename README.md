@@ -64,10 +64,14 @@ That's it! You're ready to use the application. If you encounter any issues, fee
 
 ## Database
 
-The app uses PostgreSQL for users, chat messages, and Express sessions. On startup it creates the `users` and `chat_messages` tables; the PostgreSQL session store creates its table automatically. Database queries use parameters to avoid SQL injection.
+The app uses PostgreSQL for users, direct and group chat messages, private groups, group membership, and Express sessions. On startup it creates the required tables; the PostgreSQL session store creates its table automatically. Database queries use parameters to avoid SQL injection.
 
 For local development, `docker-compose up --build` starts the app and PostgreSQL. The PostgreSQL volume preserves local data across container restarts. New accounts can be created from the registration page.
 
 For Render, set `DATABASE_URL` to the external PostgreSQL provider’s pooled connection string (for Neon, copy it from the Neon dashboard) and `SECRET` to a strong random value. Chat delivery uses in-process Socket.IO connections, so deploy a single application instance; multiple instances require a shared Socket.IO adapter.
 
 This migration does not copy existing MongoDB records. Create accounts again in the PostgreSQL-backed app or migrate data separately if a MongoDB database contains records you need.
+
+## Private group chats
+
+Sign in, open **Create a private group**, enter a group name, and select at least one registered member. The creator is included automatically. Only members can load or send group messages; individual one-to-one chats remain available separately. Group membership and messages are stored in PostgreSQL.
