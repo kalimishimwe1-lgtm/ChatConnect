@@ -1,50 +1,74 @@
+require("dotenv").config();
+
 const express = require("express");
-const app = express();
+const http = require("http");
 const bodyparser = require("body-parser");
 const path = require("path");
 const indexRoutes = require("./routes/index");
 const session = require("express-session");
 const passport = require("passport");
-const mongoose = require('mongoose');
-const MongoStore = require('connect-mongo')
-require('dotenv').config();
+const PgSession = require("connect-pg-simple")(session);
+const { pool, initializeDatabase } = require("./db/database");
 
-const SECRET = process.env.SECRET || 'hey';
+const app = express();
+const server = http.createServer(app);
+const SECRET = process.env.SECRET;
 
-const MONGODB_URL = process.env.ME_CONFIG_MONGODB_URL
-
-mongoose.connect(MONGODB_URL)
-  .then((result) => {
-    console.log("Connected Successfully...")
-  }) .catch((error) => {
-    console.log("Failed to connect to the database: "+error.message)
-});
+if (!SECRET) {
+    throw new Error("SECRET is required to start the application.");
+}
 
 app.set("view engine", "ejs");
+app.set("trust proxy", 1);
 app.use(bodyparser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const sessionMiddleware = session({
-    secret: SECRET,
-    resave: true,
-    saveUninitialized: true,
-    store: MongoStore.create({
-      mongoUrl: MONGODB_URL
-    })
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", uptime: process.uptime() });
 });
 
-app.use(sessionMiddleware);
+app.use(
+    session({
+        secret: SECRET,
+        resave: false,
+        saveUninitialized: false,
+        store: new PgSession({
+            pool,
+            tableName: "user_sessions",
+            createTableIfMissing: true,
+        }),
+        cookie: {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+        },
+    })
+);
 
 app.use(passport.initialize());
 app.use(passport.session());
 require("./auth/passport-config");
-
 app.use("/", indexRoutes);
 
-const port = process.env.PORT || 3000;
+const port = Number(process.env.PORT || 3000);
 
-const server = app.listen(port, () => console.log(`Listening on the port ${port}...`));
+const startServer = async () => {
+    try {
+        await initializeDatabase();
+        await pool.query("SELECT 1");
+        console.log("Connected to PostgreSQL.");
 
-module.exports = server
+        require("./socket/socketHandler")(server);
+        server.listen(port, "0.0.0.0", () => {
+            console.log(`Listening on the port ${port}...`);
+        });
+    } catch (error) {
+        console.error("Failed to initialize PostgreSQL:", error);
+        await pool.end();
+        process.exitCode = 1;
+    }
+};
 
-require('./socket/socketHandler')
+startServer();
+
+module.exports = server;

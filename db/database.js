@@ -1,24 +1,44 @@
-const mongoose = require("mongoose");
+const { Pool } = require("pg");
 
-const userSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    contactNo: { type: String, required: true, unique: true },
-    img: { type: String, required: true },
-    status: { type: String, default: "offline" },
-    preview: { type: String },
-    Password: { type: String, required: true },
+if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required to connect to PostgreSQL.");
+}
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 5,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
 });
 
-const chatSchema = new mongoose.Schema({
-    from: { type: String, required: true },
-    to: { type: String, required: true },
-    img: { type: String, required: true },
-    type: {type: String, required: true, default:"text"},
-    message: { type: String, required: true },
-    datetime: { type: Date, default: Date.now },
+pool.on("error", (error) => {
+    console.error("Unexpected PostgreSQL pool error:", error);
 });
 
-const User = mongoose.model("User", userSchema);
-const Chat = mongoose.model("Chat", chatSchema);
+const initializeDatabase = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            contact_no TEXT NOT NULL UNIQUE,
+            img TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'offline',
+            preview TEXT,
+            password TEXT NOT NULL
+        )
+    `);
 
-module.exports = { User, Chat };
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id BIGSERIAL PRIMARY KEY,
+            from_contact_no TEXT NOT NULL,
+            to_contact_no TEXT NOT NULL,
+            img TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'text',
+            message TEXT NOT NULL,
+            datetime TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+};
+
+module.exports = { pool, initializeDatabase };

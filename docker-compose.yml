@@ -1,14 +1,29 @@
-# Docker Compose Configuration for ChatConnect Application
-
-version: '2.24'
-
 services:
-  chat-connect:
-    # Build the Docker image using the Dockerfile in the current directory
-    build: .
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
     ports:
-      # Map host port 3000 to container port 3000
-      - 3000:3000
-    # Load environment variables from the .env file
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: chatconnect
+      POSTGRES_USER: chatconnect
+      POSTGRES_PASSWORD: chatconnect
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  chat-connect:
+    build: .
+    depends_on:
+      - postgres
+    ports:
+      - "3000:3000"
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://chatconnect:chatconnect@postgres:5432/chatconnect}
+      SECRET: ${SECRET:-development-only-secret}
+      NODE_ENV: ${NODE_ENV:-development}
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

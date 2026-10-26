@@ -66,20 +66,17 @@ router.post(
 );
 
 router.get("/logout", (req, res, next) => {
-    const mongoStore = req.sessionStore;
-
     if (req.session) {
-        mongoStore.destroy(req.sessionID, (err) => {
+        req.session.destroy((err) => {
             if (err) {
-                return next(err)
+                return next(err);
             }
 
-            req.session = null;
-            res.redirect("/users/login");
+            res.clearCookie("connect.sid");
+            res.redirect("/login");
         });
-        
     } else {
-        res.redirect("/users/login");
+        res.redirect("/login");
     }
 });
 

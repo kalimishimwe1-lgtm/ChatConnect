@@ -1,59 +1,37 @@
 const Server = require("../services/Server");
-const client = require("../redis/redis-client");
 const sobj = new Server();
+const userConnections = new Map();
 
 exports.addUserConnection = (socketId, phoneNumber) => {
-    client.hSet("Session", phoneNumber, socketId);
+    const key = String(phoneNumber);
+    const connections = userConnections.get(key) || new Set();
+    connections.add(socketId);
+    userConnections.set(key, connections);
 };
 
-exports.deleteUserConnection = async (socketId) => {
-    client
-        .hGetAll("Session")
-        .then((sessionData) => {
-            for (const phoneNumber in sessionData) {
-                if (socketId === sessionData[phoneNumber]) {
-                    client.hDel("Session", phoneNumber);
-                }
-            }
-        })
-        .catch((error) => {
-            console.error(error.message);
-        });
-};
-
-const getUser = (phoneNumber) => {
-    return client.hGet('Session', phoneNumber)
-};
-
-exports.sendMessage = async (socket, data) => {
-    if (data.to.startsWith("room-")) {
-        socket.to(data.to).emit("receive-message", data);
-    } else {
-        sobj.appendChat(data)
-        const receiver = await getUser(data.to);
-        socket.to(receiver).emit("receive-message", data);
+exports.deleteUserConnection = (socketId) => {
+    for (const [phoneNumber, connections] of userConnections) {
+        connections.delete(socketId);
+        if (connections.size === 0) {
+            userConnections.delete(phoneNumber);
+        }
     }
 };
 
-exports.publishMessage = async (data) => {
-    client.publish("MESSAGES", JSON.stringify(data));
+exports.sendMessage = async (io, data) => {
+    if (data.to.startsWith("room-")) {
+        io.to(data.to).emit("receive-message", data);
+    } else {
+        await sobj.appendChat(data);
+        const receiverConnections = userConnections.get(String(data.to));
+        if (receiverConnections) {
+            for (const socketId of receiverConnections) {
+                io.to(socketId).emit("receive-message", data);
+            }
+        }
+    }
 };
 
 exports.fetchChatMessage = async (detail) => {
-    const key = `${detail.to}:${detail.from}`
-    try {
-        let result = await client.EXISTS(key)
-
-        if (result) {
-            result = await client.get(key)  
-            result = JSON.parse(result)
-        } else {
-            result = await sobj.fetchChatMessage(detail);
-            client.setEx(key, 10 ,JSON.stringify(result))
-        }
-
-        return result;
-    } catch (err) {
-        console.log(err.message);
-    }
+    return sobj.fetchChatMessage(detail);
 };

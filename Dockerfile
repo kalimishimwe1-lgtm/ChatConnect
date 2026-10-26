@@ -21,7 +21,6 @@ COPY routes/ routes/
 COPY services/ services/
 COPY public/ public/
 COPY app.js app.js
-COPY redis/ redis/
 COPY socket/ socket/
 
 # Specify the command to run the application
