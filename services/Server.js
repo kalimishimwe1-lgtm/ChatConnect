@@ -6,6 +6,7 @@ const userFields = `
     name,
     contact_no AS "contactNo",
     img,
+    about,
     status,
     preview,
     password AS "Password"
@@ -39,11 +40,25 @@ class Server {
 
     fetchAllUser = async () => {
         const result = await pool.query(`
-            SELECT id, name, contact_no AS "contactNo", img, status, preview
+            SELECT id, name, contact_no AS "contactNo", img, about, status, preview
             FROM users
             ORDER BY id
         `);
         return result.rows;
+    };
+
+    updateUserProfile = async (userId, name, about) => {
+        await pool.query(
+            `UPDATE users SET name = $2, about = $3 WHERE id = $1`,
+            [userId, name, about]
+        );
+    };
+
+    updateUserStatus = async (userId, status) => {
+        await pool.query(
+            `UPDATE users SET status = $2 WHERE id = $1`,
+            [userId, status]
+        );
     };
 
     fetchUsersByIds = async (ids) => {
@@ -156,6 +171,81 @@ class Server {
                 OR (from_contact_no = $2 AND to_contact_no = $1)
              ORDER BY datetime`,
             [from, to]
+        );
+        return result.rows;
+    };
+
+    searchChatsForUser = async (userId, contactNo, query) => {
+        const result = await pool.query(
+            `SELECT *
+             FROM (
+                 SELECT NULL::text AS id,
+                        'direct'::text AS "chatType",
+                        other.contact_no AS "conversationId",
+                        other.contact_no AS "contactNo",
+                        other.name AS "conversationName",
+                        other.img,
+                        NULL::text AS message,
+                        NULL::timestamptz AS datetime
+                 FROM users other
+                 WHERE other.id <> $1
+                   AND POSITION(LOWER($3) IN LOWER(other.name)) > 0
+
+                 UNION ALL
+
+                 SELECT m.id::text AS id,
+                        'direct'::text AS "chatType",
+                        other.contact_no AS "conversationId",
+                        other.contact_no AS "contactNo",
+                        other.name AS "conversationName",
+                        other.img,
+                        LEFT(m.message, 120) AS message,
+                        m.datetime
+                 FROM chat_messages m
+                 JOIN users other
+                   ON other.contact_no = CASE
+                       WHEN m.from_contact_no = $2 THEN m.to_contact_no
+                       ELSE m.from_contact_no
+                   END
+                 WHERE (m.from_contact_no = $2 OR m.to_contact_no = $2)
+                   AND m.type = 'text'
+                   AND POSITION(LOWER($3) IN LOWER(m.message)) > 0
+
+                 UNION ALL
+
+                 SELECT NULL::text AS id,
+                        'group'::text AS "chatType",
+                        g.id::text AS "conversationId",
+                        NULL::text AS "contactNo",
+                        g.name AS "conversationName",
+                        NULL::text AS img,
+                        NULL::text AS message,
+                        NULL::timestamptz AS datetime
+                 FROM chat_groups g
+                 JOIN chat_group_members gm ON gm.group_id = g.id
+                 WHERE gm.user_id = $1
+                   AND POSITION(LOWER($3) IN LOWER(g.name)) > 0
+
+                 UNION ALL
+
+                 SELECT m.id::text AS id,
+                        'group'::text AS "chatType",
+                        g.id::text AS "conversationId",
+                        NULL::text AS "contactNo",
+                        g.name AS "conversationName",
+                        NULL::text AS img,
+                        LEFT(m.message, 120) AS message,
+                        m.datetime
+                 FROM chat_group_messages m
+                 JOIN chat_groups g ON g.id = m.group_id
+                 JOIN chat_group_members gm
+                   ON gm.group_id = g.id AND gm.user_id = $1
+                 WHERE m.type = 'text'
+                   AND POSITION(LOWER($3) IN LOWER(m.message)) > 0
+             ) AS matches
+             ORDER BY datetime DESC NULLS LAST, "conversationName"
+             LIMIT 50`,
+            [userId, contactNo, query]
         );
         return result.rows;
     };

@@ -1,6 +1,7 @@
 const {
     addUserConnection,
     deleteUserConnection,
+    updatePresence,
     sendMessage,
     fetchChatMessage,
 } = require("./user-socket-handler");
@@ -19,10 +20,49 @@ module.exports = (server, sessionMiddleware) => {
             return;
         }
 
-        addUserConnection(socket.id, user.contactNo);
+        const isFirstConnection = addUserConnection(socket.id, user.contactNo);
+        let initialPresenceReady = Promise.resolve();
+        if (isFirstConnection) {
+            const initialStatus = user.status === "away" ? "away" : "online";
+            initialPresenceReady = updatePresence(io, user, initialStatus).catch((error) => {
+                console.error("Failed to update user presence on connection:", error);
+                socket.emit("presence-error", "Your presence could not be updated.");
+            });
+        }
 
-        socket.on("disconnect", () => {
-            deleteUserConnection(socket.id);
+        socket.on("disconnect", async () => {
+            const disconnectedUser = deleteUserConnection(socket.id);
+            if (disconnectedUser) {
+                try {
+                    await initialPresenceReady;
+                    await updatePresence(io, user, "offline");
+                } catch (error) {
+                    console.error("Failed to update user presence on disconnect:", error);
+                }
+            }
+        });
+
+        socket.on("set-presence", async (status, acknowledge) => {
+            if (status !== "online" && status !== "away") {
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: false, message: "Choose online or away status." });
+                }
+                return;
+            }
+
+            try {
+                await initialPresenceReady;
+                await updatePresence(io, user, status);
+                user.status = status;
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: true, status });
+                }
+            } catch (error) {
+                console.error("Failed to update user presence:", error);
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: false, message: "Your presence could not be updated." });
+                }
+            }
         });
 
         socket.on("send-message", async (data, acknowledge) => {

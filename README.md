@@ -75,3 +75,7 @@ This migration does not copy existing MongoDB records. Create accounts again in 
 ## Private group chats
 
 Sign in, open **Create a private group**, enter a group name, and select at least one registered member. The creator is included automatically. Only members can load or send group messages; individual one-to-one chats remain available separately. Group membership and messages are stored in PostgreSQL.
+
+## Profiles, presence, and search
+
+Use **Edit profile** to change your display name and about message. Choose **Online** or **Away** from the profile status menu; signing out or disconnecting your final active chat session marks you offline. Search contacts, private groups, and text messages from the search field. Group search and message results are restricted to groups the signed-in user belongs to.

@@ -22,10 +22,16 @@ const initializeDatabase = async () => {
             name TEXT NOT NULL,
             contact_no TEXT NOT NULL UNIQUE,
             img TEXT NOT NULL,
+            about TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL DEFAULT 'offline',
             preview TEXT,
             password TEXT NOT NULL
         )
+    `);
+
+    await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS about TEXT NOT NULL DEFAULT ''
     `);
 
     await pool.query(`

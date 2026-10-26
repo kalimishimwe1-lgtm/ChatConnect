@@ -30,15 +30,13 @@
         <div id="sidepanel">
             <div id="profile">
                 <div class="wrap">
-                    <img id="profile-img" src="<%= user.img %>" class="online" alt="" />
+                    <img id="profile-img" src="<%= user.img %>" class="<%= user.status %>" alt="" />
                     <p id="name"><%= user.name %></p>
                     <i class="fa fa-chevron-down expand-button" aria-hidden="true"></i>
                     <div id="status-options">
                         <ul>
-                            <li id="status-online" class="active"><span class="status-circle"></span> <p>Online</p></li>
-                            <li id="status-away"><span class="status-circle"></span> <p>Away</p></li>
-                            <li id="status-busy"><span class="status-circle"></span> <p>Busy</p></li>
-                            <li id="status-offline"><span class="status-circle"></span> <p>Offline</p></li>
+                            <li id="status-online" class="<%= user.status === 'online' ? 'active' : '' %>"><span class="status-circle"></span> <p>Online</p></li>
+                            <li id="status-away" class="<%= user.status === 'away' ? 'active' : '' %>"><span class="status-circle"></span> <p>Away</p></li>
                         </ul>
                     </div>
                     <div id="expanded">
@@ -46,10 +44,24 @@
                         <input name="contact" type="text" value="<%= user.contactNo %>" disabled />
                     </div>
                 </div>
+                <p id="profile-about"><%= user.about || "Add an about message to your profile." %></p>
+                <details class="profile-editor">
+                    <summary>Edit profile</summary>
+                    <% if (profileSuccess) { %><p class="profile-notice"><%= profileSuccess %></p><% } %>
+                    <% if (profileError) { %><p class="profile-notice profile-error"><%= profileError %></p><% } %>
+                    <form method="post" action="/profile">
+                        <label for="profile-name">Display name</label>
+                        <input id="profile-name" name="name" type="text" maxlength="40" value="<%= user.name %>" required />
+                        <label for="profile-about-input">About</label>
+                        <textarea id="profile-about-input" name="about" maxlength="160" rows="3"><%= user.about || "" %></textarea>
+                        <button type="submit">Save profile</button>
+                    </form>
+                </details>
             </div>
             <div id="search">
                 <label for=""><i class="fa fa-search" aria-hidden="true"></i></label>
-                <input type="text" placeholder="Search contacts..." />
+                <input id="chat-search" type="search" placeholder="Search contacts and messages..." autocomplete="off" />
+                <ul id="search-results" aria-live="polite"></ul>
             </div>
             <div id="contacts">
                 <% if (groupSuccess) { %>
@@ -100,7 +112,7 @@
                     <% if (typeof contacts !== 'undefined' && contacts.length > 0) { 
                         for (contact of contacts) { 
 							if (contact.contactNo !== user.contactNo) {%>
-                            <li class="contact" onclick="showUserInMainPanel(<%= JSON.stringify(contact) %>)">
+                            <li class="contact" data-contact-no="<%= contact.contactNo %>" onclick="showUserInMainPanel(<%= JSON.stringify(contact) %>)">
                                 <div class="wrap">
                                     <span class="contact-status <%= contact.status %>"></span>
                                     <img src="<%= contact.img %>" alt="" />
@@ -134,6 +146,7 @@
 				<p class="mt-4">
 					<span class="name">Harvey Specter</span>
 					<span class="small text d-block mt-3" style="color: #999;">9876543211</span>
+                    <span class="about"></span>
 				</p>
 				<div class="social-media">
 					<i class="fa fa-facebook" aria-hidden="true"></i>

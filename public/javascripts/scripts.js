@@ -10,25 +10,9 @@ $(".expand-button").click(function () {
 });
 
 $("#status-options ul li").click(function () {
-    $("#profile-img").removeClass();
-    $("#status-online").removeClass("active");
-    $("#status-away").removeClass("active");
-    $("#status-busy").removeClass("active");
-    $("#status-offline").removeClass("active");
-    $(this).addClass("active");
-
-    if ($("#status-online").hasClass("active")) {
-        $("#profile-img").addClass("online");
-    } else if ($("#status-away").hasClass("active")) {
-        $("#profile-img").addClass("away");
-    } else if ($("#status-busy").hasClass("active")) {
-        $("#profile-img").addClass("busy");
-    } else if ($("#status-offline").hasClass("active")) {
-        $("#profile-img").addClass("offline");
-    } else {
-        $("#profile-img").removeClass();
+    if (typeof setPresence === "function") {
+        setPresence(this.id === "status-away" ? "away" : "online");
     }
-
     $("#status-options").removeClass("active");
 });
 

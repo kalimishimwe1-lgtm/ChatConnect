@@ -60,7 +60,50 @@ router.get("/index", async (req, res, next) => {
             groups,
             groupSuccess: req.flash("groupSuccess")[0],
             groupError: req.flash("groupError")[0],
+            profileSuccess: req.flash("profileSuccess")[0],
+            profileError: req.flash("profileError")[0],
         });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post("/profile", async (req, res, next) => {
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const about = typeof req.body.about === "string" ? req.body.about.trim() : "";
+
+    if (name.length < 1 || name.length > 40) {
+        req.flash("profileError", "Your name must be between 1 and 40 characters.");
+        return res.redirect("/index");
+    }
+
+    if (about.length > 160) {
+        req.flash("profileError", "Your about message must be 160 characters or fewer.");
+        return res.redirect("/index");
+    }
+
+    try {
+        await sobj.updateUserProfile(req.user.id, name, about);
+        req.flash("profileSuccess", "Your profile was updated.");
+        res.redirect("/index");
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get("/search", async (req, res, next) => {
+    const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (query.length > 80) {
+        return res.status(400).json({ error: "Search terms must be 80 characters or fewer." });
+    }
+
+    if (!query) {
+        return res.json({ results: [] });
+    }
+
+    try {
+        const results = await sobj.searchChatsForUser(req.user.id, req.user.contactNo, query);
+        res.json({ results });
     } catch (error) {
         next(error);
     }

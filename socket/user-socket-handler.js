@@ -1,19 +1,44 @@
 const Server = require("../services/Server");
 const sobj = new Server();
 const userConnections = new Map();
+const presenceUpdates = new Map();
 
 exports.addUserConnection = (socketId, phoneNumber) => {
     const key = String(phoneNumber);
     const connections = userConnections.get(key) || new Set();
     connections.add(socketId);
     userConnections.set(key, connections);
+    return connections.size === 1;
 };
 
 exports.deleteUserConnection = (socketId) => {
     for (const [phoneNumber, connections] of userConnections) {
-        connections.delete(socketId);
+        if (!connections.delete(socketId)) continue;
         if (connections.size === 0) {
             userConnections.delete(phoneNumber);
+            return phoneNumber;
+        }
+        return null;
+    }
+    return null;
+};
+
+exports.updatePresence = async (io, user, status) => {
+    const key = String(user.id);
+    const previousUpdate = presenceUpdates.get(key) || Promise.resolve();
+    const update = previousUpdate
+        .catch(() => {})
+        .then(async () => {
+            await sobj.updateUserStatus(user.id, status);
+            io.emit("presence-update", { contactNo: user.contactNo, status });
+        });
+    presenceUpdates.set(key, update);
+
+    try {
+        await update;
+    } finally {
+        if (presenceUpdates.get(key) === update) {
+            presenceUpdates.delete(key);
         }
     }
 };

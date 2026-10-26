@@ -455,6 +455,166 @@ body {
     width: 100%;
 }
 
+#frame #sidepanel #profile-about {
+    margin: 4px 10% 8px;
+    color: #b8c7d6;
+    font-size: 0.85em;
+    overflow-wrap: anywhere;
+}
+
+#frame #sidepanel .profile-editor {
+    width: 80%;
+    margin: 0 auto 10px;
+    color: #f5f5f5;
+    font-size: 0.9em;
+}
+
+#frame #sidepanel .profile-editor summary {
+    cursor: pointer;
+    color: #b8c7d6;
+}
+
+#frame #sidepanel .profile-editor form {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+#frame #sidepanel .profile-editor input,
+#frame #sidepanel .profile-editor textarea {
+    width: 100%;
+    padding: 7px;
+    border: 1px solid #435f7a;
+    border-radius: 4px;
+    background: #32465a;
+    color: #fff;
+    resize: vertical;
+}
+
+#frame #sidepanel .profile-editor button {
+    padding: 8px;
+    border: 0;
+    border-radius: 4px;
+    background: #27ae60;
+    color: #fff;
+    cursor: pointer;
+}
+
+#frame #sidepanel .profile-notice {
+    margin-top: 6px;
+    color: #2ecc71;
+    overflow-wrap: anywhere;
+}
+
+#frame #sidepanel .profile-notice.profile-error {
+    color: #ff8b82;
+}
+
+#frame #sidepanel #search {
+    position: relative;
+}
+
+#frame #sidepanel #search-results {
+    display: none;
+    position: absolute;
+    z-index: 100;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    max-height: 280px;
+    overflow-y: auto;
+    background: #243140;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+#frame #sidepanel #search-results .search-result {
+    display: grid;
+    width: 100%;
+    gap: 4px;
+    padding: 10px 14px;
+    border: 0;
+    border-bottom: 1px solid #32465a;
+    background: transparent;
+    color: #f5f5f5;
+    text-align: left;
+    cursor: pointer;
+}
+
+#frame #sidepanel #search-results .search-result:hover {
+    background: #435f7a;
+}
+
+#frame #sidepanel #search-results .search-result-preview,
+#frame #sidepanel #search-results .search-empty {
+    overflow: hidden;
+    color: #b8c7d6;
+    font-size: 0.85em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#frame #sidepanel #search-results .search-empty {
+    padding: 10px 14px;
+}
+
+#frame .content .contact-profile .about {
+    display: block;
+    max-width: 340px;
+    margin-top: 6px;
+    color: #7b8b99;
+    font-size: 0.85em;
+}
+
+@media screen and (max-width: 735px) {
+    #frame #sidepanel {
+        overflow: visible;
+    }
+
+    #frame #sidepanel .profile-editor {
+        position: absolute;
+        z-index: 101;
+        top: 58px;
+        left: 58px;
+        width: 240px;
+        padding: 10px;
+        background: #2c3e50;
+    }
+
+    #frame #sidepanel #profile-about {
+        display: none;
+    }
+
+    #frame #sidepanel #search {
+        display: block;
+        position: absolute;
+        z-index: 102;
+        top: 60px;
+        left: 0;
+        width: 58px;
+        height: 40px;
+        border: 0;
+    }
+
+    #frame #sidepanel #search input {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 58px;
+        height: 40px;
+        padding-left: 42px;
+        cursor: text;
+    }
+
+    #frame #sidepanel #search input:focus {
+        width: 260px;
+    }
+
+    #frame #sidepanel #search-results {
+        top: 40px;
+        width: 260px;
+    }
+}
+
 @media screen and (max-width: 735px) {
     #frame #sidepanel #contacts .group-section h2 {
         display: none;
