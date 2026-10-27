@@ -62,6 +62,9 @@ const attachCallHandlers = (io, socket, user, service = sobj) => {
         let reservedUser = false;
         let reservedConversation = null;
         try {
+            if (!user.isActive || !(await service.isUserActive(user.id))) {
+                return emitResult(acknowledge, { ok: false, message: "Your account is disabled." });
+            }
             if (!data || !["audio", "video"].includes(data.mode)) {
                 return emitResult(acknowledge, { ok: false, message: "Choose an audio or video call." });
             }
@@ -83,7 +86,7 @@ const attachCallHandlers = (io, socket, user, service = sobj) => {
                 }
 
                 const recipient = await service.getUserByContactNo(contactNo);
-                if (!recipient) {
+                if (!recipient || !recipient.isActive) {
                     return emitResult(acknowledge, { ok: false, message: "That contact is no longer available." });
                 }
                 chatId = contactNo;
@@ -148,6 +151,9 @@ const attachCallHandlers = (io, socket, user, service = sobj) => {
 
     socket.on("call:join", async (data, acknowledge) => {
         try {
+            if (!user.isActive || !(await service.isUserActive(user.id))) {
+                return emitResult(acknowledge, { ok: false, message: "Your account is disabled." });
+            }
             const call = data && calls.get(String(data.callId));
             if (!call || !call.allowedUserIds.has(userId)) {
                 return emitResult(acknowledge, { ok: false, message: "This call is no longer available." });

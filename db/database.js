@@ -35,6 +35,26 @@ const initializeDatabase = async () => {
     `);
 
     await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user',
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+
+    const adminContactNos = [...new Set(
+        (process.env.ADMIN_CONTACT_NOS || "")
+            .split(",")
+            .map((contactNo) => contactNo.trim())
+            .filter(Boolean)
+    )];
+    if (adminContactNos.length) {
+        await pool.query(
+            `UPDATE users SET role = 'admin', is_active = TRUE
+             WHERE contact_no = ANY($1::text[])`,
+            [adminContactNos]
+        );
+    }
+
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS chat_messages (
             id BIGSERIAL PRIMARY KEY,
             from_contact_no TEXT NOT NULL,

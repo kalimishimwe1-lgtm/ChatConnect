@@ -45,6 +45,9 @@
                     </div>
                 </div>
                 <p id="profile-about"><%= user.about || "Add an about message to your profile." %></p>
+                <% if (user.role === 'admin') { %>
+                    <span class="role-badge">Administrator</span>
+                <% } %>
                 <details class="profile-editor">
                     <summary>Edit profile</summary>
                     <% if (profileSuccess) { %><p class="profile-notice"><%= profileSuccess %></p><% } %>
@@ -64,6 +67,48 @@
                     </form>
                 </details>
             </div>
+            <% if (user.role === 'admin') { %>
+                <section class="admin-users">
+                    <% if (adminSuccess) { %><p class="admin-notice"><%= adminSuccess %></p><% } %>
+                    <% if (adminError) { %><p class="admin-notice admin-error"><%= adminError %></p><% } %>
+                    <details>
+                        <summary>Manage users and access</summary>
+                        <ul>
+                            <% adminUsers.forEach(function (account) { %>
+                                <li class="admin-user">
+                                    <div class="admin-user-details">
+                                        <strong><%= account.name %></strong>
+                                        <span><%= account.contactNo %></span>
+                                        <span><%= account.isActive ? 'Active' : 'Disabled' %></span>
+                                    </div>
+                                    <% if (String(account.id) === String(user.id)) { %>
+                                        <span class="admin-self-label">Your account</span>
+                                    <% } else { %>
+                                        <form method="post" action="/admin/users/<%= account.id %>/access">
+                                            <input type="hidden" name="csrfToken" value="<%= adminCsrfToken %>" />
+                                            <label>
+                                                Role
+                                                <select name="role">
+                                                    <option value="user" <%= account.role === 'user' ? 'selected' : '' %>>User</option>
+                                                    <option value="admin" <%= account.role === 'admin' ? 'selected' : '' %>>Admin</option>
+                                                </select>
+                                            </label>
+                                            <label>
+                                                Account
+                                                <select name="isActive">
+                                                    <option value="true" <%= account.isActive ? 'selected' : '' %>>Enabled</option>
+                                                    <option value="false" <%= account.isActive ? '' : 'selected' %>>Disabled</option>
+                                                </select>
+                                            </label>
+                                            <button type="submit">Save access</button>
+                                        </form>
+                                    <% } %>
+                                </li>
+                            <% }) %>
+                        </ul>
+                    </details>
+                </section>
+            <% } %>
             <div id="search">
                 <label for=""><i class="fa fa-search" aria-hidden="true"></i></label>
                 <input id="chat-search" type="search" placeholder="Search contacts and messages..." autocomplete="off" />

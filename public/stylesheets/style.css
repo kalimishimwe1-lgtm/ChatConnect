@@ -521,6 +521,90 @@ body {
     color: #ff8b82;
 }
 
+#frame #sidepanel .role-badge {
+    display: inline-block;
+    margin: 0 10%;
+    padding: 3px 7px;
+    border-radius: 10px;
+    background: #27ae60;
+    color: #fff;
+    font-size: 0.75em;
+}
+
+#frame #sidepanel .admin-users {
+    width: 80%;
+    margin: 0 auto 10px;
+    color: #f5f5f5;
+    font-size: 0.85em;
+}
+
+#frame #sidepanel .admin-users summary {
+    color: #b8c7d6;
+    cursor: pointer;
+}
+
+#frame #sidepanel .admin-users ul {
+    max-height: 300px;
+    margin-top: 8px;
+    overflow-y: auto;
+}
+
+#frame #sidepanel .admin-user {
+    display: grid;
+    gap: 7px;
+    padding: 9px 0;
+    border-bottom: 1px solid #435f7a;
+}
+
+#frame #sidepanel .admin-user-details {
+    display: grid;
+    gap: 3px;
+    overflow-wrap: anywhere;
+}
+
+#frame #sidepanel .admin-user-details span,
+#frame #sidepanel .admin-self-label {
+    color: #b8c7d6;
+    font-size: 0.9em;
+}
+
+#frame #sidepanel .admin-user form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+#frame #sidepanel .admin-user form label {
+    display: grid;
+    gap: 3px;
+    color: #b8c7d6;
+}
+
+#frame #sidepanel .admin-user form select,
+#frame #sidepanel .admin-user form button {
+    min-width: 0;
+    padding: 6px;
+    border: 0;
+    border-radius: 3px;
+}
+
+#frame #sidepanel .admin-user form button {
+    grid-column: 1 / -1;
+    background: #27ae60;
+    color: #fff;
+    cursor: pointer;
+}
+
+#frame #sidepanel .admin-notice {
+    margin: 8px 0;
+    color: #a8f0c6;
+    overflow-wrap: anywhere;
+}
+
+#frame #sidepanel .admin-notice.admin-error {
+    color: #ffb3a7;
+}
+
 #frame #sidepanel #search {
     position: relative;
 }
@@ -585,6 +669,16 @@ body {
         position: absolute;
         z-index: 101;
         top: 58px;
+        left: 58px;
+        width: 240px;
+        padding: 10px;
+        background: #2c3e50;
+    }
+
+    #frame #sidepanel .admin-users {
+        position: absolute;
+        z-index: 101;
+        top: 105px;
         left: 58px;
         width: 240px;
         padding: 10px;

@@ -1,7 +1,8 @@
 var express = require("express");
 var router = express.Router();
-const { createHmac } = require("crypto");
+const { createHmac, randomBytes, timingSafeEqual } = require("crypto");
 const requireAuth = require("../auth/loginAuthentication");
+const requireAdmin = require("../auth/requireAdmin");
 const passport = require("passport");
 const flash = require("connect-flash");
 const Server = require('../services/Server')
@@ -12,6 +13,15 @@ const { profilePictureUpload } = require("../services/profilePictureUpload");
 router.use(flash());
 
 router.use(requireAuth);
+
+const isValidAdminCsrfToken = (sessionToken, submittedToken) => {
+    if (typeof sessionToken !== "string" || typeof submittedToken !== "string") {
+        return false;
+    }
+    const expected = Buffer.from(sessionToken);
+    const submitted = Buffer.from(submittedToken);
+    return expected.length === submitted.length && timingSafeEqual(expected, submitted);
+};
 
 router.get("/ice-servers", (req, res) => {
     const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
@@ -97,21 +107,70 @@ router.post("/register", profilePictureUpload, handleProfilePictureUploadError, 
 router.get("/index", async (req, res, next) => {
     try {
         const user = req.user;
-        const [usersData, groups] = await Promise.all([
+        const [usersData, groups, adminUsers] = await Promise.all([
             sobj.fetchAllUser(),
             sobj.fetchGroupsForUser(user.id),
+            user.role === "admin" ? sobj.fetchAdminUsers() : Promise.resolve([]),
         ]);
+        if (user.role === "admin" && !req.session.adminCsrfToken) {
+            req.session.adminCsrfToken = randomBytes(32).toString("hex");
+        }
         res.render("index", {
             user,
             contacts: usersData,
             groups,
+            adminUsers,
+            adminCsrfToken: user.role === "admin" ? req.session.adminCsrfToken : "",
             groupSuccess: req.flash("groupSuccess")[0],
             groupError: req.flash("groupError")[0],
             profileSuccess: req.flash("profileSuccess")[0],
             profileError: req.flash("profileError")[0],
+            adminSuccess: req.flash("adminSuccess")[0],
+            adminError: req.flash("adminError")[0],
         });
     } catch (error) {
         next(error);
+    }
+});
+
+router.post("/admin/users/:id/access", requireAdmin, async (req, res, next) => {
+    if (!isValidAdminCsrfToken(req.session.adminCsrfToken, req.body.csrfToken)) {
+        return res.status(403).send("Your session token is invalid. Reload the page and try again.");
+    }
+
+    const targetId = typeof req.params.id === "string" ? req.params.id : "";
+    const role = req.body.role;
+    const isActive = req.body.isActive === "true"
+        ? true
+        : req.body.isActive === "false"
+            ? false
+            : null;
+    if (!/^[1-9]\d*$/.test(targetId) || !["admin", "user"].includes(role) || isActive === null) {
+        req.flash("adminError", "Choose a valid role and account-access setting.");
+        return res.redirect("/index");
+    }
+
+    try {
+        const result = await sobj.updateUserAccess(req.user.id, targetId, role, isActive);
+        if (!result.ok) {
+            req.flash("adminError", result.message);
+            return res.redirect("/index");
+        }
+
+        const io = req.app.get("io");
+        if (io) {
+            for (const socket of io.sockets.sockets.values()) {
+                if (String(socket.request.user && socket.request.user.id) !== targetId) continue;
+                socket.request.user.role = result.user.role;
+                socket.request.user.isActive = result.user.isActive;
+                if (!result.user.isActive) socket.disconnect(true);
+            }
+        }
+
+        req.flash("adminSuccess", `Access updated for ${result.user.name}.`);
+        return res.redirect("/index");
+    } catch (error) {
+        return next(error);
     }
 });
 

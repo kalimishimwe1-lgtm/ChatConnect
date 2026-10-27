@@ -44,6 +44,9 @@ exports.updatePresence = async (io, user, status) => {
 };
 
 exports.sendMessage = async (io, socket, data, user) => {
+    if (!user.isActive || !(await sobj.isUserActive(user.id))) {
+        throw new Error("Your account is disabled.");
+    }
     if (!data || typeof data.message !== "string" || !data.message.trim()) {
         throw new Error("A message is required.");
     }
@@ -88,6 +91,10 @@ exports.sendMessage = async (io, socket, data, user) => {
     if (!to || to.length > 64 || to.startsWith("room-")) {
         throw new Error("Choose a valid contact.");
     }
+    const recipient = await sobj.getUserByContactNo(to);
+    if (!recipient || !recipient.isActive) {
+        throw new Error("That contact is not available.");
+    }
 
     const messageData = {
         from: user.contactNo,
@@ -109,6 +116,9 @@ exports.sendMessage = async (io, socket, data, user) => {
 };
 
 exports.fetchChatMessage = async (socket, detail, user) => {
+    if (!user.isActive || !(await sobj.isUserActive(user.id))) {
+        throw new Error("Your account is disabled.");
+    }
     if (detail && detail.groupId !== undefined) {
         const groupId = String(detail.groupId);
         if (!/^[1-9]\d*$/.test(groupId)) {

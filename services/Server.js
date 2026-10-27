@@ -9,6 +9,8 @@ const userFields = `
     about,
     status,
     preview,
+    role,
+    is_active AS "isActive",
     password AS "Password"
 `;
 
@@ -38,13 +40,102 @@ class Server {
         return result.rows[0] || null;
     };
 
+    isUserActive = async (userId) => {
+        const result = await pool.query(
+            `SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE`,
+            [userId]
+        );
+        return result.rowCount > 0;
+    };
+
     fetchAllUser = async () => {
         const result = await pool.query(`
             SELECT id, name, contact_no AS "contactNo", img, about, status, preview
             FROM users
+            WHERE is_active = TRUE
             ORDER BY id
         `);
         return result.rows;
+    };
+
+    fetchAdminUsers = async () => {
+        const result = await pool.query(`
+            SELECT id::text AS id, name, contact_no AS "contactNo",
+                   role, is_active AS "isActive"
+            FROM users
+            ORDER BY id
+        `);
+        return result.rows;
+    };
+
+    updateUserAccess = async (adminId, targetId, role, isActive) => {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            await client.query("SELECT pg_advisory_xact_lock(734829102)");
+
+            const adminResult = await client.query(
+                `SELECT role, is_active AS "isActive"
+                 FROM users WHERE id = $1`,
+                [adminId]
+            );
+            if (
+                !adminResult.rows[0] ||
+                adminResult.rows[0].role !== "admin" ||
+                !adminResult.rows[0].isActive
+            ) {
+                await client.query("ROLLBACK");
+                return { ok: false, status: 403, message: "Administrator access is required." };
+            }
+            if (String(adminId) === String(targetId)) {
+                await client.query("ROLLBACK");
+                return { ok: false, status: 400, message: "You cannot change your own role or access." };
+            }
+
+            const targetResult = await client.query(
+                `SELECT role, is_active AS "isActive"
+                 FROM users WHERE id = $1`,
+                [targetId]
+            );
+            if (!targetResult.rows[0]) {
+                await client.query("ROLLBACK");
+                return { ok: false, status: 404, message: "That user account was not found." };
+            }
+
+            if (role !== "admin" || !isActive) {
+                const remainingAdmins = await client.query(
+                    `SELECT COUNT(*)::int AS count
+                     FROM users
+                     WHERE role = 'admin' AND is_active = TRUE
+                       AND id <> $1`,
+                    [targetId]
+                );
+                if (
+                    targetResult.rows[0].role === "admin" &&
+                    targetResult.rows[0].isActive &&
+                    remainingAdmins.rows[0].count === 0
+                ) {
+                    await client.query("ROLLBACK");
+                    return { ok: false, status: 400, message: "At least one active administrator must remain." };
+                }
+            }
+
+            const updated = await client.query(
+                `UPDATE users SET role = $2, is_active = $3
+                 WHERE id = $1
+                 RETURNING id::text AS id, name,
+                           contact_no AS "contactNo", role,
+                           is_active AS "isActive"`,
+                [targetId, role, isActive]
+            );
+            await client.query("COMMIT");
+            return { ok: true, user: updated.rows[0] };
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
     };
 
     updateUserProfile = async (userId, name, about) => {
@@ -91,7 +182,8 @@ class Server {
 
     fetchUsersByIds = async (ids) => {
         const result = await pool.query(
-            `SELECT id::text AS id FROM users WHERE id = ANY($1::bigint[])`,
+            `SELECT id::text AS id FROM users
+             WHERE id = ANY($1::bigint[]) AND is_active = TRUE`,
             [ids]
         );
         return result.rows.map((row) => row.id);
@@ -145,7 +237,7 @@ class Server {
                     u.img
              FROM chat_group_members m
              JOIN users u ON u.id = m.user_id
-             WHERE m.group_id = $1`,
+             WHERE m.group_id = $1 AND u.is_active = TRUE`,
             [groupId]
         );
         return result.rows;
@@ -154,8 +246,9 @@ class Server {
     isGroupMember = async (groupId, userId) => {
         const result = await pool.query(
             `SELECT 1
-             FROM chat_group_members
-             WHERE group_id = $1 AND user_id = $2`,
+             FROM chat_group_members m
+             JOIN users u ON u.id = m.user_id
+             WHERE m.group_id = $1 AND m.user_id = $2 AND u.is_active = TRUE`,
             [groupId, userId]
         );
         return result.rowCount > 0;
@@ -231,6 +324,7 @@ class Server {
                         NULL::timestamptz AS datetime
                  FROM users other
                  WHERE other.id <> $1
+                   AND other.is_active = TRUE
                    AND POSITION(LOWER($3) IN LOWER(other.name)) > 0
 
                  UNION ALL
@@ -249,7 +343,8 @@ class Server {
                        WHEN m.from_contact_no = $2 THEN m.to_contact_no
                        ELSE m.from_contact_no
                    END
-                 WHERE (m.from_contact_no = $2 OR m.to_contact_no = $2)
+                 WHERE other.is_active = TRUE
+                   AND (m.from_contact_no = $2 OR m.to_contact_no = $2)
                    AND m.type = 'text'
                    AND POSITION(LOWER($3) IN LOWER(m.message)) > 0
 

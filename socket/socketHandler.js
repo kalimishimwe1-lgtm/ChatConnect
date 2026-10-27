@@ -18,7 +18,7 @@ module.exports = (server, sessionMiddleware) => {
 
     io.on("connection", (socket) => {
         const user = socket.request.user;
-        if (!user) {
+        if (!user || !user.isActive) {
             socket.disconnect(true);
             return;
         }

@@ -72,6 +72,12 @@ For Render, set `DATABASE_URL` to the external PostgreSQL provider’s pooled co
 
 This migration does not copy existing MongoDB records. Create accounts again in the PostgreSQL-backed app or migrate data separately if a MongoDB database contains records you need.
 
+## User roles and access
+
+Accounts are regular users by default. To bootstrap administrators, set the server-only `ADMIN_CONTACT_NOS` environment variable to a comma-separated list of contact numbers for existing accounts before starting the app (for example, `ADMIN_CONTACT_NOS=15551234567`). The database startup migration promotes those accounts and re-enables them. On Render, set this in the service's environment settings; do not expose it in browser code.
+
+Administrators can use **Manage users and access** to promote or demote users and enable or disable accounts. A disabled account cannot sign in, chat, or join calls; its connected sockets are disconnected immediately. Administrators cannot change their own access, and at least one active administrator must remain. Remove contact numbers from `ADMIN_CONTACT_NOS` after bootstrapping if you do not want startup to restore those accounts as administrators.
+
 ## Private group chats
 
 Sign in, open **Create a private group**, enter a group name, and select at least one registered member. The creator is included automatically. Only members can load or send group messages; individual one-to-one chats remain available separately. Group membership and messages are stored in PostgreSQL.
