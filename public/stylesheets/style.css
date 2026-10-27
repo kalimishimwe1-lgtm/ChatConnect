@@ -500,6 +500,17 @@ body {
     cursor: pointer;
 }
 
+#frame #sidepanel .profile-picture-label {
+    color: #b8c7d6;
+}
+
+#frame #sidepanel .profile-picture-help,
+#frame #sidepanel #profile-picture-message {
+    color: #b8c7d6;
+    font-size: 0.8em;
+    overflow-wrap: anywhere;
+}
+
 #frame #sidepanel .profile-notice {
     margin-top: 6px;
     color: #2ecc71;

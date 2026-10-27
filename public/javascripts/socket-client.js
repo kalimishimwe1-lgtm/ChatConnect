@@ -10,7 +10,7 @@ function scrollToLatestMessage() {
     $(".messages").animate({ scrollTop: docHeight }, "fast");
 }
 
-function displayMessage(mode, imgSrc, message, time) {
+function displayMessage(mode, imgSrc, message, time, fromContact) {
     const item = $("<li>").addClass(mode);
     const avatar = $("<img>").attr("src", imgSrc || "").attr("alt", "");
     const content = $("<p>").text(message);
@@ -19,11 +19,12 @@ function displayMessage(mode, imgSrc, message, time) {
         .text(time);
 
     content.append(timestamp);
-    item.append(avatar, content).appendTo($(".messages ul"));
+    item.append(avatar, content).attr("data-from-contact", fromContact || "")
+        .appendTo($(".messages ul"));
     docHeight += 93;
 }
 
-function displayImageMessage(mode, userImg, imageUrl) {
+function displayImageMessage(mode, userImg, imageUrl, fromContact) {
     const item = $("<li>").addClass(mode);
     item.append(
         $("<img>").attr("src", userImg || "").attr("alt", ""),
@@ -32,7 +33,7 @@ function displayImageMessage(mode, userImg, imageUrl) {
             .attr("alt", "Shared image")
             .addClass("message-image")
     );
-    item.appendTo($(".messages ul"));
+    item.attr("data-from-contact", fromContact || "").appendTo($(".messages ul"));
     docHeight += 93;
 }
 
@@ -49,9 +50,9 @@ function showMessage(message) {
     const formattedTime = moment(message.datetime).format("hh:mm A");
     const mode = message.from === currentContactNo ? "replies" : "sent";
     if (message.type === "image") {
-        displayImageMessage(mode, message.img, message.message);
+        displayImageMessage(mode, message.img, message.message, message.from);
     } else {
-        displayMessage(mode, message.img, message.message, formattedTime);
+        displayMessage(mode, message.img, message.message, formattedTime, message.from);
     }
 }
 
@@ -90,7 +91,8 @@ function showUserInMainPanel(user) {
     activeChat = { type: "direct", contactNo: String(user.contactNo) };
     toggleSelectChatMessage(false);
     $(".contact-profile").removeClass("group-chat");
-    $(".contact-profile img").attr("src", user.img || "");
+    const userImage = window.profilePicturesByContact[user.contactNo] || user.img;
+    $(".contact-profile img").attr("src", userImage || "");
     $(".contact-profile .name").text(user.name);
     $(".contact-profile .small.text.d-block").text(user.contactNo);
     $(".contact-profile .about").text(user.about || "");
@@ -302,6 +304,27 @@ socket.on("presence-update", ({ contactNo, status }) => {
     applyPresence(contactNo, status);
 });
 socket.on("presence-error", (message) => window.alert(message));
+
+socket.on("profile-picture-updated", ({ contactNo, img }) => {
+    window.profilePicturesByContact[contactNo] = img;
+
+    $("#profile-img").filter(function () {
+        return currentContactNo === String(contactNo);
+    }).attr("src", img);
+
+    $("#contacts .contact").filter(function () {
+        return this.dataset.contactNo === String(contactNo);
+    }).find(".wrap > img").attr("src", img);
+
+    if (activeChat && activeChat.type === "direct" &&
+        activeChat.contactNo === String(contactNo)) {
+        $(".contact-profile > img").attr("src", img);
+    }
+
+    $(".messages li[data-from-contact]").filter(function () {
+        return this.dataset.fromContact === String(contactNo);
+    }).find("img").first().attr("src", img);
+});
 
 function logout() {
     window.location.href = `${window.location.origin}/logout`;

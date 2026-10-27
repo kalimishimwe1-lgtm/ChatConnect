@@ -54,6 +54,34 @@ class Server {
         );
     };
 
+    updateProfilePicture = async (userId, img) => {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const result = await client.query(
+                `UPDATE users SET img = $2 WHERE id = $1
+                 RETURNING img, contact_no AS "contactNo"`,
+                [userId, img]
+            );
+            if (result.rowCount === 0) {
+                await client.query("ROLLBACK");
+                return null;
+            }
+
+            await client.query(
+                `UPDATE chat_messages SET img = $1 WHERE from_contact_no = $2`,
+                [img, result.rows[0].contactNo]
+            );
+            await client.query("COMMIT");
+            return result.rows[0];
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+    };
+
     updateUserStatus = async (userId, status) => {
         await pool.query(
             `UPDATE users SET status = $2 WHERE id = $1`,

@@ -1,5 +1,7 @@
 $(".messages").animate({ scrollTop: $(document).height() }, "fast");
 
+window.profilePicturesByContact = Object.create(null);
+
 $("#profile-img").click(function () {
     $("#status-options").toggleClass("active");
 });
@@ -83,3 +85,33 @@ function selectFile(e) {
         reader.readAsDataURL(file);
     }
 }
+
+$("#profilePicture").on("change", async function () {
+    const file = this.files[0];
+    if (!file) return;
+
+    const profileImage = $("#profile-img");
+    const previousImage = profileImage.attr("src");
+    const previewUrl = URL.createObjectURL(file);
+    const message = $("#profile-picture-message");
+    profileImage.attr("src", previewUrl);
+    message.text("Uploading profile picture...");
+
+    try {
+        const formData = new FormData($("#profile-picture-form")[0]);
+        const response = await fetch("/profile-picture", { method: "POST", body: formData });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || "The profile picture could not be updated.");
+        }
+
+        profileImage.attr("src", result.img);
+        message.text("Profile picture updated.");
+    } catch (error) {
+        profileImage.attr("src", previousImage);
+        message.text(error.message || "The profile picture could not be updated.");
+    } finally {
+        URL.revokeObjectURL(previewUrl);
+        this.value = "";
+    }
+});

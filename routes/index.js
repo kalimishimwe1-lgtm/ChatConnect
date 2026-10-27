@@ -6,10 +6,29 @@ const flash = require("connect-flash");
 const Server = require('../services/Server')
 const sobj = new Server()
 const { register } = require('../controller/register')
+const { profilePictureUpload } = require("../services/profilePictureUpload");
 
 router.use(flash());
 
 router.use(requireAuth);
+
+const handleProfilePictureUploadError = (req, res, next) => {
+    const error = req.profilePictureError;
+    if (!error) {
+        return next();
+    }
+
+    const message = error.code === "LIMIT_FILE_SIZE"
+        ? "Profile pictures must be 2 MB or smaller."
+        : error.message;
+    const status = error.statusCode || (error.code === "LIMIT_FILE_SIZE" ? 413 : 400);
+
+    if (req.path === "/register") {
+        return res.status(status).render("registration", { message });
+    }
+
+    return res.status(status).json({ error: message });
+};
 
 router.get("/", (req, res, next) => {
     if (req.user) {
@@ -35,16 +54,23 @@ router.get("/register", async (req, res, next) => {
     res.render("registration", { messages: result });
 });
 
-router.post("/register", async (req, res, next) => {
-    const data = req.body;
-    
-    const result = await register(data);
-    if (result.hasError) {
-        res.render("registration", {"message":result.error});
-    } else {
-		req.flash("messages", [result.message, false]);
-		res.redirect("/login");
-	}
+router.post("/register", profilePictureUpload, handleProfilePictureUploadError, async (req, res, next) => {
+    try {
+        const data = {
+            ...req.body,
+            img: req.profilePicture || "/images/default-profile.svg",
+        };
+        const result = await register(data);
+
+        if (result.hasError) {
+            return res.status(400).render("registration", { message: result.error });
+        }
+
+        req.flash("messages", [result.message, false]);
+        return res.redirect("/login");
+    } catch (error) {
+        return next(error);
+    }
 });
 
 router.get("/index", async (req, res, next) => {
@@ -88,6 +114,37 @@ router.post("/profile", async (req, res, next) => {
         res.redirect("/index");
     } catch (error) {
         next(error);
+    }
+});
+
+router.post("/profile-picture", profilePictureUpload, handleProfilePictureUploadError, async (req, res, next) => {
+    if (!req.profilePicture) {
+        return res.status(400).json({ error: "Choose an image to upload." });
+    }
+
+    try {
+        const updatedUser = await sobj.updateProfilePicture(req.user.id, req.profilePicture);
+        if (!updatedUser) {
+            return res.status(404).json({ error: "User account was not found." });
+        }
+
+        const io = req.app.get("io");
+        if (io) {
+            for (const socket of io.sockets.sockets.values()) {
+                if (String(socket.request.user && socket.request.user.id) === String(req.user.id)) {
+                    socket.request.user.img = updatedUser.img;
+                }
+            }
+            io.emit("profile-picture-updated", {
+                userId: String(req.user.id),
+                contactNo: req.user.contactNo,
+                img: updatedUser.img,
+            });
+        }
+
+        return res.json({ img: updatedUser.img });
+    } catch (error) {
+        return next(error);
     }
 });
 

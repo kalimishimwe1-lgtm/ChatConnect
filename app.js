@@ -57,7 +57,8 @@ const startServer = async () => {
         await pool.query("SELECT 1");
         console.log("Connected to PostgreSQL.");
 
-        require("./socket/socketHandler")(server, sessionMiddleware);
+        const io = require("./socket/socketHandler")(server, sessionMiddleware);
+        app.set("io", io);
         server.listen(port, "0.0.0.0", () => {
             console.log(`Listening on the port ${port}...`);
         });

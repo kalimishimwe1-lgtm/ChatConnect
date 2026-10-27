@@ -78,4 +78,4 @@ Sign in, open **Create a private group**, enter a group name, and select at leas
 
 ## Profiles, presence, and search
 
-Use **Edit profile** to change your display name and about message. Choose **Online** or **Away** from the profile status menu; signing out or disconnecting your final active chat session marks you offline. Search contacts, private groups, and text messages from the search field. Group search and message results are restricted to groups the signed-in user belongs to.
+Use **Edit profile** to change your display name, about message, and profile picture. Profile pictures accept JPEG, PNG, GIF, or WebP files up to 2 MB; changes update connected users and existing direct-chat history. Choose **Online** or **Away** from the profile status menu; signing out or disconnecting your final active chat session marks you offline. Search contacts, private groups, and text messages from the search field. Group search and message results are restricted to groups the signed-in user belongs to.

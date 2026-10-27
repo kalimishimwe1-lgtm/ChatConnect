@@ -56,6 +56,12 @@
                         <textarea id="profile-about-input" name="about" maxlength="160" rows="3"><%= user.about || "" %></textarea>
                         <button type="submit">Save profile</button>
                     </form>
+                    <form id="profile-picture-form" enctype="multipart/form-data">
+                        <label class="profile-picture-label" for="profilePicture">Change profile picture</label>
+                        <input id="profilePicture" name="profilePicture" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+                        <p class="profile-picture-help">JPEG, PNG, GIF, or WebP. Maximum file size: 2 MB.</p>
+                        <p id="profile-picture-message" role="status" aria-live="polite"></p>
+                    </form>
                 </details>
             </div>
             <div id="search">
