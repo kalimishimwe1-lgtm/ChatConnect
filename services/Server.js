@@ -137,6 +137,20 @@ class Server {
         return result.rows;
     };
 
+    fetchGroupMembers = async (groupId) => {
+        const result = await pool.query(
+            `SELECT u.id::text AS id,
+                    u.contact_no AS "contactNo",
+                    u.name,
+                    u.img
+             FROM chat_group_members m
+             JOIN users u ON u.id = m.user_id
+             WHERE m.group_id = $1`,
+            [groupId]
+        );
+        return result.rows;
+    };
+
     isGroupMember = async (groupId, userId) => {
         const result = await pool.query(
             `SELECT 1

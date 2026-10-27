@@ -1,5 +1,6 @@
 var express = require("express");
 var router = express.Router();
+const { createHmac } = require("crypto");
 const requireAuth = require("../auth/loginAuthentication");
 const passport = require("passport");
 const flash = require("connect-flash");
@@ -11,6 +12,26 @@ const { profilePictureUpload } = require("../services/profilePictureUpload");
 router.use(flash());
 
 router.use(requireAuth);
+
+router.get("/ice-servers", (req, res) => {
+    const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+    const turnUrls = (process.env.TURN_URLS || "")
+        .split(",")
+        .map((url) => url.trim())
+        .filter(Boolean);
+    const sharedSecret = process.env.TURN_SHARED_SECRET;
+
+    if (turnUrls.length && sharedSecret) {
+        const username = `${Math.floor(Date.now() / 1000) + 3600}:${req.user.id}`;
+        const credential = createHmac("sha1", sharedSecret)
+            .update(username)
+            .digest("base64");
+        iceServers.push({ urls: turnUrls, username, credential });
+    }
+
+    res.set("Cache-Control", "no-store");
+    res.json({ iceServers });
+});
 
 const handleProfilePictureUploadError = (req, res, next) => {
     const error = req.profilePictureError;

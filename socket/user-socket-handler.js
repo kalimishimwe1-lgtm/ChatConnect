@@ -48,8 +48,15 @@ exports.sendMessage = async (io, socket, data, user) => {
         throw new Error("A message is required.");
     }
 
-    const type = data.type === "image" ? "image" : "text";
+    const type = ["image", "audio"].includes(data.type) ? data.type : "text";
     const message = data.message;
+    if (type === "audio" && (
+        message.length > 28 * 1024 * 1024 ||
+        !/^data:audio\/(?:webm|ogg|mp4|mpeg|wav)(?:;codecs=[a-z0-9._-]+)?;base64,[a-z0-9+/]+=*$/i.test(message)
+    )) {
+        throw new Error("Voice notes must be a supported audio recording under 50 minutes.");
+    }
+
     if (data.groupId !== undefined) {
         const groupId = String(data.groupId);
         if (!/^[1-9]\d*$/.test(groupId)) {

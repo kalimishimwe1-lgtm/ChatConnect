@@ -79,3 +79,9 @@ Sign in, open **Create a private group**, enter a group name, and select at leas
 ## Profiles, presence, and search
 
 Use **Edit profile** to change your display name, about message, and profile picture. Profile pictures accept JPEG, PNG, GIF, or WebP files up to 2 MB; changes update connected users and existing direct-chat history. Choose **Online** or **Away** from the profile status menu; signing out or disconnecting your final active chat session marks you offline. Search contacts, private groups, and text messages from the search field. Group search and message results are restricted to groups the signed-in user belongs to.
+
+## Audio and video calls, and voice notes
+
+Start an audio or video call from an open direct chat or private group. Group calls support up to 15 participants using peer-to-peer connections; performance depends on participants' devices and networks. Calls use a public STUN server by default. For networks that require a relay, configure `TURN_URLS` as a comma-separated list of TURN server URLs and `TURN_SHARED_SECRET` with the server's shared secret. The app issues time-limited TURN credentials to signed-in users; never expose or commit the shared secret.
+
+Select the microphone beside the message field to record a voice note, then select it again to stop and send. Notes are limited to 50 minutes and 20 MB. Calls and microphone recording require HTTPS and browser permission to use the microphone or camera.

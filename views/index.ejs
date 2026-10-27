@@ -30,7 +30,7 @@
         <div id="sidepanel">
             <div id="profile">
                 <div class="wrap">
-                    <img id="profile-img" src="<%= user.img %>" class="<%= user.status %>" alt="" />
+                    <img id="profile-img" src="<%= user.img %>" class="<%= user.status %>" data-user-id="<%= user.id %>" alt="<%= user.name %>'s profile picture" />
                     <p id="name"><%= user.name %></p>
                     <i class="fa fa-chevron-down expand-button" aria-hidden="true"></i>
                     <div id="status-options">
@@ -154,12 +154,34 @@
 					<span class="small text d-block mt-3" style="color: #999;">9876543211</span>
                     <span class="about"></span>
 				</p>
+                <div class="call-actions">
+                    <button id="start-audio-call" type="button" aria-label="Start audio call">
+                        <i class="fa fa-phone" aria-hidden="true"></i> Audio call
+                    </button>
+                    <button id="start-video-call" type="button" aria-label="Start video call">
+                        <i class="fa fa-video-camera" aria-hidden="true"></i> Video call
+                    </button>
+                </div>
 				<div class="social-media">
 					<i class="fa fa-facebook" aria-hidden="true"></i>
 					<i class="fa fa-twitter" aria-hidden="true"></i>
 					<i class="fa fa-instagram" aria-hidden="true"></i>
 				</div>
 			</div>
+            <section id="call-panel" class="call-panel" aria-live="polite" hidden>
+                <div class="call-panel-header">
+                    <p id="call-status">Call</p>
+                    <button id="end-call" type="button">End call</button>
+                </div>
+                <div id="incoming-call-actions" hidden>
+                    <button id="answer-call" type="button">Answer</button>
+                    <button id="decline-call" type="button">Decline</button>
+                </div>
+                <div id="call-video-grid">
+                    <video id="local-call-video" autoplay muted playsinline aria-label="Your camera"></video>
+                    <div id="remote-call-videos"></div>
+                </div>
+            </section>
 			<div class="messages">
 				<ul>
 					<li class="sent">
@@ -184,6 +206,10 @@
 				<input type="text" placeholder="Write your message..." />
 				<label for="fileInput" class="fa fa-paperclip attachment" aria-hidden="true"></label>
                 <input type="file" accept="image/*" id="fileInput" style="display: none;" onchange="selectFile(event)">
+                <button id="record-voice-note" class="voice-note-button" type="button" aria-label="Record voice note" title="Record voice note">
+                    <i class="fa fa-microphone" aria-hidden="true"></i>
+                </button>
+                <span id="voice-note-status" role="status" aria-live="polite"></span>
 				<button class="submit"><i class="fa fa-paper-plane" aria-hidden="true"></i></button>
 				</div>
 			</div>

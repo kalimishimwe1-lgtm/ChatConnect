@@ -6,9 +6,12 @@ const {
     fetchChatMessage,
 } = require("./user-socket-handler");
 const passport = require("passport");
+const attachCallHandlers = require("./call-handler");
 
 module.exports = (server, sessionMiddleware) => {
-    const io = require("socket.io")(server);
+    const io = require("socket.io")(server, {
+        maxHttpBufferSize: 32 * 1024 * 1024,
+    });
     io.engine.use(sessionMiddleware);
     io.engine.use(passport.initialize());
     io.engine.use(passport.session());
@@ -20,6 +23,7 @@ module.exports = (server, sessionMiddleware) => {
             return;
         }
 
+        attachCallHandlers(io, socket, user);
         const isFirstConnection = addUserConnection(socket.id, user.contactNo);
         let initialPresenceReady = Promise.resolve();
         if (isFirstConnection) {

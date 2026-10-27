@@ -952,6 +952,77 @@ body {
 #frame .content .contact-profile .social-media i:hover {
     color: #435f7a;
 }
+#frame .content .contact-profile .call-actions {
+    float: right;
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+}
+#frame .content .contact-profile .call-actions button,
+#call-panel button {
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 4px;
+    background: #27ae60;
+    color: #fff;
+    cursor: pointer;
+}
+#frame .content .call-panel[hidden],
+#frame .content #incoming-call-actions[hidden] {
+    display: none;
+}
+#frame .content .call-panel {
+    position: absolute;
+    z-index: 90;
+    inset: 60px 0 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    overflow: auto;
+    background: rgba(36, 49, 64, 0.97);
+    color: #fff;
+}
+#call-panel .call-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+#call-panel .call-panel-header p {
+    margin: 0;
+}
+#call-panel #incoming-call-actions {
+    display: flex;
+    gap: 8px;
+}
+#call-panel #call-video-grid,
+#call-panel #remote-call-videos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+#call-panel video {
+    width: 100%;
+    max-height: 45vh;
+    min-height: 120px;
+    border-radius: 8px;
+    background: #111;
+    object-fit: cover;
+}
+#call-panel .call-audio-only {
+    display: none;
+}
+#call-panel .remote-call-tile {
+    min-width: 0;
+    padding: 6px;
+    border-radius: 8px;
+    background: #32465a;
+    text-align: center;
+}
+#call-panel .remote-call-tile p {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+}
 #frame .content .messages {
     height: auto;
     min-height: calc(95% - 93px);
@@ -1036,7 +1107,7 @@ body {
     font-family: "proxima-nova", "Source Sans Pro", sans-serif;
     float: left;
     border: none;
-    width: calc(100% - 90px);
+    width: calc(100% - 145px);
     padding: 11px 32px 10px 8px;
     font-size: 0.8em;
     color: #32465a;
@@ -1051,7 +1122,7 @@ body {
 }
 #frame .content .message-input .wrap .attachment {
     position: absolute;
-    right: 60px;
+    right: 105px;
     z-index: 4;
     margin-top: 10px;
     font-size: 1.1em;
@@ -1062,7 +1133,7 @@ body {
 @media screen and (max-width: 735px) {
     #frame .content .message-input .wrap .attachment {
         margin-top: 17px;
-        right: 65px;
+        right: 105px;
     }
 }
 #frame .content .message-input .wrap .attachment:hover {
@@ -1076,6 +1147,36 @@ body {
     cursor: pointer;
     background: #32465a;
     color: #f5f5f5;
+}
+#frame .content .message-input .wrap #record-voice-note {
+    width: 45px;
+    background: #435f7a;
+}
+#frame .content .message-input .wrap #record-voice-note.recording {
+    background: #c0392b;
+}
+#frame .content .message-input .wrap #voice-note-status {
+    position: absolute;
+    right: 55px;
+    bottom: 48px;
+    max-width: 75%;
+    color: #32465a;
+    font-size: 0.8em;
+}
+#frame .content .messages .voice-note-player {
+    display: block;
+    max-width: min(280px, 70vw);
+    height: 40px;
+}
+@media screen and (max-width: 735px) {
+    #frame .content .contact-profile .call-actions {
+        gap: 3px;
+        padding: 10px 5px;
+    }
+    #frame .content .contact-profile .call-actions button {
+        padding: 7px 5px;
+        font-size: 0.75em;
+    }
 }
 @media screen and (max-width: 735px) {
     #frame .content .message-input .wrap button {
