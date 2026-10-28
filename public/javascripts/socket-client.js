@@ -126,6 +126,9 @@ function showUserInMainPanel(user) {
     if (!user || !user.contactNo) return;
 
     activeChat = { type: "direct", contactNo: String(user.contactNo) };
+    $("#contacts .contact").removeClass("active").filter(function () {
+        return this.dataset.contactNo === String(user.contactNo);
+    }).addClass("active");
     toggleSelectChatMessage(false);
     $(".contact-profile").removeClass("group-chat");
     const userImage = window.profilePicturesByContact[user.contactNo] || user.img;
@@ -141,6 +144,9 @@ function showUserInMainPanel(user) {
 
 function showGroupInMainPanel(group) {
     activeChat = { type: "group", id: String(group.id), name: group.name };
+    $("#contacts .contact").removeClass("active").filter(function () {
+        return this.dataset.groupId === String(group.id);
+    }).addClass("active");
     toggleSelectChatMessage(false);
     $(".contact-profile").addClass("group-chat");
     $(".contact-profile .name").text(group.name);

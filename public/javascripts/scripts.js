@@ -19,6 +19,7 @@ $("#status-options ul li").click(function () {
 });
 
 function toggleSelectChatMessage(show) {
+    $("#frame").toggleClass("chat-open", !show);
     if (show) {
         $("#selectChatMessage").show();
         $(".contact-profile").hide();
@@ -33,6 +34,7 @@ function toggleSelectChatMessage(show) {
 }
 
 toggleSelectChatMessage(true);
+$("#back-to-chats").on("click", () => toggleSelectChatMessage(true));
 
 $(document).ready(function () {
     $(document).keyup(function (e) {
