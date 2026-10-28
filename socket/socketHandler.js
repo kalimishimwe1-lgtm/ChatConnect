@@ -4,6 +4,9 @@ const {
     updatePresence,
     sendMessage,
     fetchChatMessage,
+    updateMessage,
+    toggleReaction,
+    updateTyping,
 } = require("./user-socket-handler");
 const passport = require("passport");
 const attachCallHandlers = require("./call-handler");
@@ -23,6 +26,7 @@ module.exports = (server, sessionMiddleware) => {
             return;
         }
 
+        socket.join(`user-${user.id}`);
         attachCallHandlers(io, socket, user);
         const isFirstConnection = addUserConnection(socket.id, user.contactNo);
         let initialPresenceReady = Promise.resolve();
@@ -87,13 +91,45 @@ module.exports = (server, sessionMiddleware) => {
 
         socket.on("load-message", async (data, onDataLoaded) => {
             try {
-                const result = await fetchChatMessage(socket, data, user);
+                const result = await fetchChatMessage(io, socket, data, user);
                 if (typeof onDataLoaded === "function") {
                     onDataLoaded(result);
                 }
             } catch (error) {
                 console.error("Failed to load chat history:", error);
                 socket.emit("message-error", "Chat history could not be loaded.");
+            }
+        });
+
+        socket.on("message:update", async (data, acknowledge) => {
+            try {
+                const message = await updateMessage(io, socket, data, user);
+                if (typeof acknowledge === "function") acknowledge({ ok: true, message });
+            } catch (error) {
+                console.error("Failed to update chat message:", error);
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: false, message: "The message could not be updated." });
+                }
+            }
+        });
+
+        socket.on("message:react", async (data, acknowledge) => {
+            try {
+                const reactions = await toggleReaction(io, data, user);
+                if (typeof acknowledge === "function") acknowledge({ ok: true, reactions });
+            } catch (error) {
+                console.error("Failed to update message reaction:", error);
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: false, message: "The reaction could not be saved." });
+                }
+            }
+        });
+
+        socket.on("chat:typing", async (data) => {
+            try {
+                await updateTyping(io, socket, data, user);
+            } catch (error) {
+                console.error("Failed to send typing indicator:", error);
             }
         });
     });

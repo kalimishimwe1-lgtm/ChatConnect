@@ -82,6 +82,10 @@ Administrators can use **Manage users and access** to promote or demote users an
 
 Sign in, open **Create a private group**, enter a group name, and select at least one registered member. The creator is included automatically. Only members can load or send group messages; individual one-to-one chats remain available separately. Group membership and messages are stored in PostgreSQL.
 
+## Chat interactions and status updates
+
+ChatConnect supports live typing indicators, sent/delivered/read message checks, and emoji reactions in direct and group conversations. Authors can edit text messages or delete messages for everyone; deletion replaces the content with a notice. Pin or archive chats for your account from the open conversation header, and use **Show archived** to switch between the two lists. Text status updates can be posted from the sidebar and expire automatically after 24 hours.
+
 ## Profiles, presence, and search
 
 Use **Edit profile** to change your display name, about message, and profile picture. Profile pictures accept JPEG, PNG, GIF, or WebP files up to 2 MB; changes update connected users and existing direct-chat history. Choose **Online** or **Away** from the profile status menu; signing out or disconnecting your final active chat session marks you offline. Search contacts, private groups, and text messages from the search field. Group search and message results are restricted to groups the signed-in user belongs to.

@@ -4,6 +4,7 @@ const currentUserId = String($("#profile-img").data("userId"));
 let activeChat = null;
 let docHeight = $(document).height();
 const displayedMessageIds = new Set();
+const pendingReceipts = new Map();
 let searchTimer = null;
 let searchRequest = null;
 let activeCall = null;
@@ -12,8 +13,12 @@ let voiceRecorder = null;
 let voiceRecordingStream = null;
 let voiceRecordingTimer = null;
 let voiceRecordingStartedAt = 0;
+let typingTimer = null;
+let isTyping = false;
+let showingArchived = false;
 const MAX_VOICE_NOTE_SECONDS = 50 * 60;
 const MAX_VOICE_NOTE_BYTES = 20 * 1024 * 1024;
+const reactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 async function loadIceServers() {
     const response = await fetch("/ice-servers");
@@ -31,7 +36,7 @@ function scrollToLatestMessage() {
 function displayMessage(mode, imgSrc, message, time, fromContact) {
     const item = $("<li>").addClass(mode);
     const avatar = $("<img>").attr("src", imgSrc || "").attr("alt", "");
-    const content = $("<p>").text(message);
+    const content = $("<p>").addClass("message-text").text(message);
     const timestamp = $("<span>")
         .addClass("float-right small text ml-2")
         .text(time);
@@ -40,6 +45,7 @@ function displayMessage(mode, imgSrc, message, time, fromContact) {
     item.append(avatar, content).attr("data-from-contact", fromContact || "")
         .appendTo($(".messages ul"));
     docHeight += 93;
+    return item;
 }
 
 function displayImageMessage(mode, userImg, imageUrl, fromContact) {
@@ -53,6 +59,7 @@ function displayImageMessage(mode, userImg, imageUrl, fromContact) {
     );
     item.attr("data-from-contact", fromContact || "").appendTo($(".messages ul"));
     docHeight += 93;
+    return item;
 }
 
 function displayAudioMessage(mode, userImg, audioUrl, fromContact) {
@@ -70,6 +77,61 @@ function displayAudioMessage(mode, userImg, audioUrl, fromContact) {
         .attr("data-from-contact", fromContact || "")
         .appendTo($(".messages ul"));
     docHeight += 93;
+    return item;
+}
+
+function decorateMessage(item, message) {
+    const conversationId = activeChat.type === "group" ? activeChat.id : activeChat.contactNo;
+    const receiptKey = `${activeChat.type}:${conversationId}:${message.id}`;
+    if (pendingReceipts.has(receiptKey)) {
+        message.receipt = pendingReceipts.get(receiptKey);
+        pendingReceipts.delete(receiptKey);
+    }
+    item.attr({
+        "data-message-id": message.id || "",
+        "data-chat-type": activeChat.type,
+        "data-receipt": message.receipt || "sent",
+        "data-deleted": message.deleted ? "true" : "false",
+    });
+    const reactions = $("<div>").addClass("message-reactions");
+    const controls = $("<div>").addClass("message-tools");
+    reactionEmojis.forEach((emoji) => {
+        controls.append($("<button>")
+            .attr({ type: "button", "aria-label": `React ${emoji}` })
+            .addClass("reaction-button")
+            .text(emoji));
+    });
+    const ownMessage = message.from === currentContactNo;
+    if (ownMessage && message.type === "text" && !message.deleted) {
+        controls.append($("<button>").attr("type", "button").addClass("edit-message").text("Edit"));
+    }
+    if (ownMessage && !message.deleted) {
+        controls.append($("<button>").attr("type", "button").addClass("delete-message").text("Delete"));
+    }
+    item.append(reactions, controls);
+    renderMessageReactions(item, message.reactions || []);
+    if (ownMessage) {
+        const receipt = $("<span>").addClass("message-receipt")
+            .attr("aria-label", message.receipt || "sent")
+            .text(message.receipt === "read" ? "✓✓" : message.receipt === "delivered" ? "✓✓" : "✓");
+        item.find(".message-text").append(" ", receipt);
+    }
+    if (message.edited) item.addClass("message-edited");
+}
+
+function renderMessageReactions(item, reactions) {
+    const list = item.find(".message-reactions").empty();
+    const counts = new Map();
+    reactions.forEach(({ emoji, userId }) => {
+        const entry = counts.get(emoji) || { count: 0, mine: false };
+        entry.count += 1;
+        entry.mine = entry.mine || String(userId) === currentUserId;
+        counts.set(emoji, entry);
+    });
+    counts.forEach((entry, emoji) => {
+        list.append($("<span>").toggleClass("my-reaction", entry.mine)
+            .text(`${emoji} ${entry.count}`));
+    });
 }
 
 function showMessage(message) {
@@ -78,19 +140,33 @@ function showMessage(message) {
             ? activeChat.id
             : activeChat.contactNo;
         const messageId = `${activeChat.type}:${chatId}:${message.id}`;
-        if (displayedMessageIds.has(messageId)) return;
+        if (displayedMessageIds.has(messageId)) {
+            const existing = $(".messages li").filter(function () {
+                return this.dataset.messageId === String(message.id);
+            });
+            if (message.receipt) {
+                existing.attr("data-receipt", message.receipt);
+                existing.find(".message-receipt")
+                    .attr("aria-label", message.receipt)
+                    .text(message.receipt === "sent" ? "✓" : "✓✓");
+            }
+            if (message.reactions) renderMessageReactions(existing, message.reactions);
+            return;
+        }
         displayedMessageIds.add(messageId);
     }
 
     const formattedTime = moment(message.datetime).format("hh:mm A");
     const mode = message.from === currentContactNo ? "replies" : "sent";
+    let item;
     if (message.type === "audio") {
-        displayAudioMessage(mode, message.img, message.message, message.from);
+        item = displayAudioMessage(mode, message.img, message.message, message.from);
     } else if (message.type === "image") {
-        displayImageMessage(mode, message.img, message.message, message.from);
+        item = displayImageMessage(mode, message.img, message.message, message.from);
     } else {
-        displayMessage(mode, message.img, message.message, formattedTime, message.from);
+        item = displayMessage(mode, message.img, message.message, formattedTime, message.from);
     }
+    decorateMessage(item, message);
 }
 
 function loadChats() {
@@ -125,7 +201,10 @@ socket.on("connect", () => {
 function showUserInMainPanel(user) {
     if (!user || !user.contactNo) return;
 
+    window.clearTimeout(typingTimer);
+    sendTyping(false);
     activeChat = { type: "direct", contactNo: String(user.contactNo) };
+    $("#typing-indicator").empty();
     $("#contacts .contact").removeClass("active").filter(function () {
         return this.dataset.contactNo === String(user.contactNo);
     }).addClass("active");
@@ -136,6 +215,7 @@ function showUserInMainPanel(user) {
     $(".contact-profile .name").text(user.name);
     $(".contact-profile .small.text.d-block").text(user.contactNo);
     $(".contact-profile .about").text(user.about || "");
+    updatePreferenceButtons();
     $(".messages ul").empty();
     displayedMessageIds.clear();
     docHeight = 0;
@@ -143,7 +223,10 @@ function showUserInMainPanel(user) {
 }
 
 function showGroupInMainPanel(group) {
+    window.clearTimeout(typingTimer);
+    sendTyping(false);
     activeChat = { type: "group", id: String(group.id), name: group.name };
+    $("#typing-indicator").empty();
     $("#contacts .contact").removeClass("active").filter(function () {
         return this.dataset.groupId === String(group.id);
     }).addClass("active");
@@ -152,11 +235,296 @@ function showGroupInMainPanel(group) {
     $(".contact-profile .name").text(group.name);
     $(".contact-profile .small.text.d-block").text("Private group");
     $(".contact-profile .about").text("");
+    updatePreferenceButtons();
     $(".messages ul").empty();
     displayedMessageIds.clear();
     docHeight = 0;
     loadChats();
 }
+
+function activeChatElement() {
+    if (!activeChat) return $();
+    return activeChat.type === "group"
+        ? $("#group-list .group-contact").filter(function () {
+            return this.dataset.groupId === activeChat.id;
+        })
+        : $("#contacts > ul > .contact").filter(function () {
+            return this.dataset.contactNo === activeChat.contactNo;
+        });
+}
+
+function updatePreferenceButtons() {
+    const item = activeChatElement();
+    $("#chat-pin").prop("disabled", !activeChat)
+        .text(item.attr("data-pinned") === "true" ? "Unpin chat" : "Pin chat");
+    $("#chat-archive").prop("disabled", !activeChat)
+        .text(item.attr("data-archived") === "true" ? "Unarchive chat" : "Archive chat");
+}
+
+function refreshChatList() {
+    $(".contact").each(function () {
+        const archived = this.dataset.archived === "true";
+        $(this).toggle(showingArchived ? archived : !archived);
+    });
+    $("#show-archived")
+        .attr("aria-pressed", String(showingArchived))
+        .text(showingArchived ? "Show active chats" : "Show archived");
+    $("#contacts > ul, #group-list").each(function () {
+        const items = $(this).children(".contact").get();
+        items.sort((left, right) => {
+            const pinnedDifference =
+                Number(right.dataset.pinned === "true") - Number(left.dataset.pinned === "true");
+            if (pinnedDifference) return pinnedDifference;
+            return $(left).find(".name").text().localeCompare($(right).find(".name").text());
+        });
+        $(this).append(items);
+    });
+}
+
+if (window.matchMedia("(max-width: 735px)").matches) {
+    $("#status-section").removeAttr("open");
+} else {
+    $("#status-section").attr("open", "");
+}
+refreshChatList();
+updatePreferenceButtons();
+
+function displayStatus(status) {
+    const entry = $("<li>").append(
+        $("<button>").attr("type", "button").addClass("status-entry")
+            .data("status-content", status.content)
+            .data("status-name", status.name)
+            .data("status-time", status.createdAt)
+            .attr("data-status-expires", status.expiresAt)
+            .append($("<strong>").text(status.name), $("<span>").text(status.content))
+    );
+    $("#status-list").prepend(entry);
+}
+
+async function refreshStatuses() {
+    try {
+        const response = await fetch("/statuses", { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok || !Array.isArray(result.statuses)) {
+            throw new Error(result.error || "Statuses could not be loaded.");
+        }
+        $("#status-list").empty();
+        result.statuses.forEach(displayStatus);
+    } catch (error) {
+        window.alert(error.message || "Statuses could not be loaded.");
+    }
+}
+
+$("#status-form").on("submit", async function (event) {
+    event.preventDefault();
+    const content = $("#status-content").val().trim();
+    try {
+        const response = await fetch("/statuses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Status could not be posted.");
+        displayStatus({
+            ...result.status,
+            name: $("#profile #name").text(),
+        });
+        this.reset();
+    } catch (error) {
+        window.alert(error.message || "Status could not be posted.");
+    }
+});
+
+$("#refresh-statuses").on("click", refreshStatuses);
+$("#status-list").on("click", ".status-entry", function () {
+    if (Date.parse($(this).attr("data-status-expires")) <= Date.now()) {
+        $(this).closest("li").remove();
+        return;
+    }
+    $("#status-dialog-name").text($(this).data("status-name"));
+    $("#status-dialog-content").text($(this).data("status-content"));
+    $("#status-dialog-time").text(moment($(this).data("status-time")).fromNow());
+    $("#status-dialog")[0].showModal();
+});
+$("#close-status-dialog").on("click", () => $("#status-dialog")[0].close());
+window.setInterval(() => {
+    $("#status-list [data-status-expires]").each(function () {
+        if (Date.parse(this.dataset.statusExpires) <= Date.now()) {
+            $(this).closest("li").remove();
+        }
+    });
+}, 60000);
+
+$("#show-archived").on("click", () => {
+    showingArchived = !showingArchived;
+    refreshChatList();
+});
+
+async function saveChatPreference(preference) {
+    if (!activeChat) return;
+    const item = activeChatElement();
+    const attribute = preference === "pinned" ? "data-pinned" : "data-archived";
+    const value = item.attr(attribute) !== "true";
+    const payload = {
+        chatType: activeChat.type,
+        conversationId: activeChat.type === "group" ? activeChat.id : activeChat.contactNo,
+        preference,
+        value,
+    };
+    try {
+        const response = await fetch("/chat-preferences", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Chat preference could not be saved.");
+        item.attr(attribute, String(value));
+        refreshChatList();
+        updatePreferenceButtons();
+    } catch (error) {
+        window.alert(error.message || "Chat preference could not be saved.");
+    }
+}
+
+$("#chat-pin").on("click", () => saveChatPreference("pinned"));
+$("#chat-archive").on("click", () => saveChatPreference("archived"));
+
+function sendTyping(isTypingNow) {
+    if (!activeChat || isTyping === isTypingNow) return;
+    isTyping = isTypingNow;
+    const payload = activeChat.type === "group"
+        ? { groupId: activeChat.id, isTyping: isTypingNow }
+        : { to: activeChat.contactNo, isTyping: isTypingNow };
+    socket.emit("chat:typing", payload);
+}
+
+$(".message-input input").on("input", () => {
+    sendTyping(true);
+    window.clearTimeout(typingTimer);
+    typingTimer = window.setTimeout(() => sendTyping(false), 1200);
+});
+$(".message-input input").on("blur", () => {
+    window.clearTimeout(typingTimer);
+    sendTyping(false);
+});
+
+socket.on("chat:typing", ({ chatType, conversationId, name, isTyping: typing }) => {
+    if (!activeChat || activeChat.type !== chatType) return;
+    const matches = chatType === "group"
+        ? activeChat.id === String(conversationId)
+        : activeChat.contactNo === String(conversationId);
+    if (!matches) return;
+    $("#typing-indicator").text(typing ? `${name ? `${name} is` : "Contact is"} typing…` : "");
+});
+
+socket.on("message:receipt", ({ messageId, status, chatType, conversationId }) => {
+    const receiptKey = `${chatType}:${conversationId}:${messageId}`;
+    const matchesActiveChat = activeChat && activeChat.type === chatType &&
+        (chatType === "group" ? activeChat.id : activeChat.contactNo) === String(conversationId);
+    const item = matchesActiveChat
+        ? $(".messages li").filter(function () {
+            return this.dataset.messageId === String(messageId) &&
+                this.dataset.fromContact === currentContactNo;
+        })
+        : $();
+    if (!item.length) {
+        const statusRank = { sent: 0, delivered: 1, read: 2 };
+        const previous = pendingReceipts.get(receiptKey);
+        if (!previous || statusRank[status] > statusRank[previous]) {
+            pendingReceipts.set(receiptKey, status);
+            if (pendingReceipts.size > 200) {
+                pendingReceipts.delete(pendingReceipts.keys().next().value);
+            }
+        }
+        return;
+    }
+    item.attr("data-receipt", status);
+    item.find(".message-receipt")
+        .attr("aria-label", status)
+        .text(status === "sent" ? "✓" : "✓✓");
+});
+
+socket.on("message:updated", (message) => {
+    if (!activeChat || activeChat.type !== message.chatType) return;
+    const conversationMatches = message.chatType === "group"
+        ? activeChat.id === String(message.conversationId)
+        : [message.to, message.from].includes(activeChat.contactNo);
+    if (!conversationMatches) return;
+    const item = $(".messages li").filter(function () {
+        return this.dataset.messageId === String(message.id);
+    });
+    if (!item.length) return;
+    if (message.deleted) {
+        item.find("audio, .message-image").remove();
+        item.find(".message-text").remove();
+        item.prepend($("<p>").addClass("message-text").text(message.message));
+        item.find(".message-tools").remove();
+        item.addClass("message-deleted");
+    } else {
+        item.find(".message-text").contents().filter(function () {
+            return this.nodeType === Node.TEXT_NODE;
+        }).first().replaceWith(document.createTextNode(message.message));
+        item.addClass("message-edited");
+    }
+});
+
+socket.on("message:reactions", ({ chatType, messageId, conversationId, reactions }) => {
+    if (!activeChat || activeChat.type !== chatType) return;
+    const activeConversationId = chatType === "group" ? activeChat.id : activeChat.contactNo;
+    if (activeConversationId !== String(conversationId)) return;
+    const item = $(".messages li").filter(function () {
+        return this.dataset.messageId === String(messageId);
+    });
+    if (item.length) renderMessageReactions(item, reactions);
+});
+
+$(".messages").on("click", ".reaction-button", function () {
+    const item = $(this).closest("li");
+    if (!activeChat || !item.attr("data-message-id")) return;
+    const payload = {
+        chatType: activeChat.type,
+        conversationId: activeChat.type === "group" ? activeChat.id : activeChat.contactNo,
+        messageId: item.attr("data-message-id"),
+        emoji: $(this).text(),
+    };
+    socket.emit("message:react", payload, (result) => {
+        if (!result || !result.ok) {
+            window.alert(result && result.message ? result.message : "Reaction failed.");
+        }
+    });
+});
+
+$(".messages").on("click", ".edit-message", function () {
+    const item = $(this).closest("li");
+    const text = window.prompt("Edit message:", item.find(".message-text").contents().filter(function () {
+        return this.nodeType === Node.TEXT_NODE;
+    }).text().trim());
+    if (text === null) return;
+    socket.emit("message:update", {
+        chatType: activeChat.type,
+        conversationId: activeChat.type === "group" ? activeChat.id : activeChat.contactNo,
+        messageId: item.attr("data-message-id"),
+        action: "edit",
+        message: text,
+    }, (result) => {
+        if (!result || !result.ok) window.alert(result && result.message || "Message edit failed.");
+    });
+});
+
+$(".messages").on("click", ".delete-message", function () {
+    if (!window.confirm("Delete this message for everyone?")) return;
+    const item = $(this).closest("li");
+    socket.emit("message:update", {
+        chatType: activeChat.type,
+        conversationId: activeChat.type === "group" ? activeChat.id : activeChat.contactNo,
+        messageId: item.attr("data-message-id"),
+        action: "delete",
+    }, (result) => {
+        if (!result || !result.ok) window.alert(result && result.message || "Message deletion failed.");
+    });
+});
 
 function sendMessage(messageOverride = null, overrideType = null, targetChat = activeChat, onComplete = null) {
     if (!targetChat) return false;
@@ -224,6 +592,7 @@ function receiveMessage(message) {
 
     showMessage(message);
     scrollToLatestMessage();
+    loadChats();
 }
 
 function callRequest(eventName, payload) {
@@ -647,6 +1016,8 @@ socket.on("call:error", ({ message }) => {
 socket.on("disconnect", () => {
     if (activeCall) finishCall(false);
     incomingCall = null;
+    isTyping = false;
+    window.clearTimeout(typingTimer);
     $("#call-panel").prop("hidden", true);
 });
 
@@ -731,11 +1102,13 @@ $("#chat-search").on("input", function () {
     const normalizedQuery = query.toLocaleLowerCase();
     $("#contacts > ul > .contact").each(function () {
         const name = $(this).find(".name").text().toLocaleLowerCase();
-        $(this).toggle(!normalizedQuery || name.includes(normalizedQuery));
+        const inArchiveView = (this.dataset.archived === "true") === showingArchived;
+        $(this).toggle(inArchiveView && (!normalizedQuery || name.includes(normalizedQuery)));
     });
     $("#group-list > .group-contact").each(function () {
         const name = $(this).find(".name").text().toLocaleLowerCase();
-        $(this).toggle(!normalizedQuery || name.includes(normalizedQuery));
+        const inArchiveView = (this.dataset.archived === "true") === showingArchived;
+        $(this).toggle(inArchiveView && (!normalizedQuery || name.includes(normalizedQuery)));
     });
 
     window.clearTimeout(searchTimer);

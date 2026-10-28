@@ -107,10 +107,12 @@ router.post("/register", profilePictureUpload, handleProfilePictureUploadError, 
 router.get("/index", async (req, res, next) => {
     try {
         const user = req.user;
-        const [usersData, groups, adminUsers] = await Promise.all([
+        const [usersData, groups, adminUsers, chatPreferences, statuses] = await Promise.all([
             sobj.fetchAllUser(),
             sobj.fetchGroupsForUser(user.id),
             user.role === "admin" ? sobj.fetchAdminUsers() : Promise.resolve([]),
+            sobj.fetchChatPreferences(user.id),
+            sobj.fetchUserStatuses(),
         ]);
         if (user.role === "admin" && !req.session.adminCsrfToken) {
             req.session.adminCsrfToken = randomBytes(32).toString("hex");
@@ -119,6 +121,8 @@ router.get("/index", async (req, res, next) => {
             user,
             contacts: usersData,
             groups,
+            chatPreferences,
+            statuses,
             adminUsers,
             adminCsrfToken: user.role === "admin" ? req.session.adminCsrfToken : "",
             groupSuccess: req.flash("groupSuccess")[0],
@@ -225,6 +229,52 @@ router.post("/profile-picture", profilePictureUpload, handleProfilePictureUpload
         return res.json({ img: updatedUser.img });
     } catch (error) {
         return next(error);
+    }
+});
+
+router.get("/statuses", async (req, res, next) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        res.json({ statuses: await sobj.fetchUserStatuses() });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post("/statuses", async (req, res, next) => {
+    const body = req.body || {};
+    const content = typeof body.content === "string" ? body.content.trim() : "";
+    if (!content || content.length > 280) {
+        return res.status(400).json({ error: "Status updates must be 1 to 280 characters." });
+    }
+    try {
+        const status = await sobj.createUserStatus(req.user.id, content);
+        res.status(201).json({ status });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post("/chat-preferences", async (req, res, next) => {
+    const { chatType, conversationId, preference, value } = req.body || {};
+    if (!["direct", "group"].includes(chatType) ||
+        typeof conversationId !== "string" || !conversationId ||
+        !["pinned", "archived"].includes(preference) ||
+        typeof value !== "boolean" ||
+        (chatType === "group" && !/^[1-9]\d*$/.test(conversationId)) ||
+        (chatType === "direct" && conversationId.length > 64)) {
+        return res.status(400).json({ error: "Invalid chat preference." });
+    }
+    try {
+        const result = await sobj.updateChatPreference(
+            req.user.id, chatType, conversationId, preference, value
+        );
+        res.json({ preference: result });
+    } catch (error) {
+        if (error.message.includes("not available")) {
+            return res.status(404).json({ error: error.message });
+        }
+        next(error);
     }
 });
 

@@ -99,8 +99,31 @@
             <div id="search">
                 <label for=""><i class="fa fa-search" aria-hidden="true"></i></label>
                 <input id="chat-search" type="search" placeholder="Search contacts and messages..." autocomplete="off" />
+                <button id="show-archived" type="button" aria-pressed="false">Show archived</button>
                 <ul id="search-results" aria-live="polite"></ul>
             </div>
+            <details id="status-section" open>
+                <summary>Status updates</summary>
+                <button id="refresh-statuses" type="button">Refresh</button>
+                <form id="status-form">
+                    <input id="status-content" type="text" maxlength="280" placeholder="Share a status (24 hours)" required />
+                    <button type="submit">Post</button>
+                </form>
+                <ul id="status-list">
+                    <% statuses.forEach(function (status) { %>
+                        <li>
+                            <button type="button" class="status-entry"
+                                data-status-content="<%= status.content %>"
+                                data-status-name="<%= status.name %>"
+                                data-status-time="<%= status.createdAt %>"
+                                data-status-expires="<%= status.expiresAt %>">
+                                <strong><%= status.name %></strong>
+                                <span><%= status.content %></span>
+                            </button>
+                        </li>
+                    <% }) %>
+                </ul>
+            </details>
             <div id="contacts">
                 <% if (groupSuccess) { %>
                     <p class="group-notice"><%= groupSuccess %></p>
@@ -115,6 +138,8 @@
                             <li class="contact group-contact"
                                 data-group-id="<%= group.id %>"
                                 data-group-name="<%= group.name %>"
+                                data-pinned="<%= chatPreferences.some(function (item) { return item.chatType === 'group' && item.conversationId === group.id && item.pinned; }) %>"
+                                data-archived="<%= chatPreferences.some(function (item) { return item.chatType === 'group' && item.conversationId === group.id && item.archived; }) %>"
                                 role="button"
                                 tabindex="0">
                                 <div class="wrap">
@@ -150,7 +175,11 @@
                     <% if (typeof contacts !== 'undefined' && contacts.length > 0) { 
                         for (contact of contacts) { 
 							if (contact.contactNo !== user.contactNo) {%>
-                            <li class="contact" data-contact-no="<%= contact.contactNo %>" onclick="showUserInMainPanel(<%= JSON.stringify(contact) %>)">
+                            <li class="contact"
+                                data-contact-no="<%= contact.contactNo %>"
+                                data-pinned="<%= chatPreferences.some(function (item) { return item.chatType === 'direct' && item.conversationId === contact.contactNo && item.pinned; }) %>"
+                                data-archived="<%= chatPreferences.some(function (item) { return item.chatType === 'direct' && item.conversationId === contact.contactNo && item.archived; }) %>"
+                                onclick="showUserInMainPanel(<%= JSON.stringify(contact) %>)">
                                 <div class="wrap">
                                     <span class="contact-status <%= contact.status %>"></span>
                                     <img src="<%= contact.img %>" alt="" />
@@ -197,7 +226,12 @@
                         <i class="fa fa-video-camera" aria-hidden="true"></i> Video call
                     </button>
                 </div>
+                <div class="chat-preference-actions">
+                    <button id="chat-pin" type="button">Pin chat</button>
+                    <button id="chat-archive" type="button">Archive chat</button>
+                </div>
 			</div>
+            <p id="typing-indicator" role="status" aria-live="polite"></p>
             <section id="call-panel" class="call-panel" aria-live="polite" hidden>
                 <div class="call-panel-header">
                     <p id="call-status">Call</p>
@@ -222,6 +256,12 @@
 							<span class="mt-2 float-right small text">11:59</span>
 						</p>
 						</div>
+            <dialog id="status-dialog">
+                <h2 id="status-dialog-name"></h2>
+                <p id="status-dialog-content"></p>
+                <time id="status-dialog-time"></time>
+                <button id="close-status-dialog" type="button">Close</button>
+            </dialog>
 					</li>
 					<li class="replies">
 						<img src="<%= user.img %>" alt="" />

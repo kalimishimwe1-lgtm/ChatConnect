@@ -21,6 +21,7 @@ if (!SECRET) {
 app.set("view engine", "ejs");
 app.set("trust proxy", 1);
 app.use(bodyparser.urlencoded({ extended: true }));
+app.use(bodyparser.json({ limit: "8kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/health", (req, res) => {
