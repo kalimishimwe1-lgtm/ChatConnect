@@ -68,6 +68,10 @@ const attachCallHandlers = (io, socket, user, service = sobj) => {
             if (!data || !["audio", "video"].includes(data.mode)) {
                 return emitResult(acknowledge, { ok: false, message: "Choose an audio or video call." });
             }
+            const requiredFeature = data.mode === "audio" ? "audio_calls" : "video_calls";
+            if (user.role !== "admin" && !(await service.isFeatureEnabled(user, requiredFeature))) {
+                return emitResult(acknowledge, { ok: false, message: "This call type is currently disabled." });
+            }
             if (usersInCall.has(userId) || usersStartingCall.has(userId)) {
                 return emitResult(acknowledge, { ok: false, message: "You are already in a call." });
             }
@@ -157,6 +161,10 @@ const attachCallHandlers = (io, socket, user, service = sobj) => {
             const call = data && calls.get(String(data.callId));
             if (!call || !call.allowedUserIds.has(userId)) {
                 return emitResult(acknowledge, { ok: false, message: "This call is no longer available." });
+            }
+            const requiredFeature = call.mode === "audio" ? "audio_calls" : "video_calls";
+            if (user.role !== "admin" && !(await service.isFeatureEnabled(user, requiredFeature))) {
+                return emitResult(acknowledge, { ok: false, message: "This call type is currently disabled." });
             }
             if (call.chatType === "group" && !(await service.isGroupMember(call.chatId, user.id))) {
                 return emitResult(acknowledge, { ok: false, message: "You are not a member of this group." });

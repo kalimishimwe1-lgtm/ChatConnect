@@ -29,7 +29,7 @@ To execute the code from the GitHub repository, follow these steps:
 
 1. **Clone Repository**:
    ```bash
-   git clone https://github.com/Rds2151/ChatConnect.git
+   git clone https://github.com/kalimishimwe1-lgtm/ChatConnect.git
    ```
 
 2. **Navigate to Directory**:
@@ -40,18 +40,18 @@ To execute the code from the GitHub repository, follow these steps:
 3. **Run Docker Compose**:
 
    ```bash
-   docker-compose up
+   docker compose up
    ```
 
    If you want to run it in detached mode, use:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 4. **Stop Docker Compose**:
 
    ```bash
-   docker-compose down
+   docker compose down
    ```
 
 5. **Access Application**:
@@ -64,7 +64,7 @@ That's it! You're ready to use the application. If you encounter any issues, fee
 
 ## Database
 
-The app uses PostgreSQL for users, direct and group chat messages, private groups, group membership, and Express sessions. On startup it creates the required tables; the PostgreSQL session store creates its table automatically. Database queries use parameters to avoid SQL injection.
+The app uses PostgreSQL for users, chat messages, and Express sessions. On startup it creates the `users` and `chat_messages` tables; the PostgreSQL session store creates its table automatically. Database queries use parameters to avoid SQL injection.
 
 For local development, `docker-compose up --build` starts the app and PostgreSQL. The PostgreSQL volume preserves local data across container restarts. New accounts can be created from the registration page.
 
@@ -72,26 +72,14 @@ For Render, set `DATABASE_URL` to the external PostgreSQL provider’s pooled co
 
 This migration does not copy existing MongoDB records. Create accounts again in the PostgreSQL-backed app or migrate data separately if a MongoDB database contains records you need.
 
-## User roles and access
+## Profile pictures
 
-Accounts are regular users by default. To bootstrap administrators, set the server-only `ADMIN_CONTACT_NOS` environment variable to a comma-separated list of contact numbers for existing accounts before starting the app (for example, `ADMIN_CONTACT_NOS=15551234567`). The database startup migration promotes those accounts and re-enables them. On Render, set this in the service's environment settings; do not expose it in browser code.
+Users can optionally upload a JPEG, PNG, GIF, or WebP profile picture while registering, or change it from the profile panel while signed in. Uploads are limited to 2 MB and stored in PostgreSQL, so they persist across deployments that retain the database. Updated pictures are reflected in contact lists and existing direct-message history for connected users.
 
-Administrators can use **Manage users and access** to promote or demote users and enable or disable accounts. A disabled account cannot sign in, chat, or join calls; its connected sockets are disconnected immediately. Administrators cannot change their own access, and at least one active administrator must remain. Remove contact numbers from `ADMIN_CONTACT_NOS` after bootstrapping if you do not want startup to restore those accounts as administrators.
+## Private groups and message receipts
 
-## Private group chats
+Create a private group from the group list and select at least one other registered user. Group messages and membership are stored in PostgreSQL; only active members can load or send messages. Direct messages show one check while sent, two gray checks when delivered to a connected device, and blue checks after the recipient opens the conversation. These receipt timestamps are stored with each message and added automatically when the app initializes an existing database.
 
-Sign in, open **Create a private group**, enter a group name, and select at least one registered member. The creator is included automatically. Only members can load or send group messages; individual one-to-one chats remain available separately. Group membership and messages are stored in PostgreSQL.
+## Wallet sign-in
 
-## Chat interactions and status updates
-
-ChatConnect supports live typing indicators, sent/delivered/read message checks, and emoji reactions in direct and group conversations. Authors can edit text messages or delete messages for everyone; deletion replaces the content with a notice. Pin or archive chats for your account from the open conversation header, and use **Show archived** to switch between the two lists. Text status updates can be posted from the sidebar and expire automatically after 24 hours.
-
-## Profiles, presence, and search
-
-Use **Edit profile** to change your display name, about message, and profile picture. Profile pictures accept JPEG, PNG, GIF, or WebP files up to 2 MB; changes update connected users and existing direct-chat history. Choose **Online** or **Away** from the profile status menu; signing out or disconnecting your final active chat session marks you offline. Search contacts, private groups, and text messages from the search field. Group search and message results are restricted to groups the signed-in user belongs to.
-
-## Audio and video calls, and voice notes
-
-Start an audio or video call from an open direct chat or private group. Group calls support up to 15 participants using peer-to-peer connections; performance depends on participants' devices and networks. Calls use a public STUN server by default. For networks that require a relay, configure `TURN_URLS` as a comma-separated list of TURN server URLs and `TURN_SHARED_SECRET` with the server's shared secret. The app issues time-limited TURN credentials to signed-in users; never expose or commit the shared secret.
-
-Select the microphone beside the message field to record a voice note, then select it again to stop and send. Notes are limited to 50 minutes and 20 MB. Calls and microphone recording require HTTPS and browser permission to use the microphone or camera.
+Users can link a browser wallet to an existing phone/password account and later sign in by signing a short-lived, one-time message. The server verifies the signature and stores only the normalized public wallet address; it never receives a private key or sends a transaction. Wallet sign-in does not yet anchor message hashes on-chain. That requires a deployed contract and separate client-side transaction integration. Never share or store wallet seed phrases or private keys in the app.

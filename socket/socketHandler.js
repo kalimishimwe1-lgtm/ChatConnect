@@ -4,11 +4,11 @@ const {
     updatePresence,
     sendMessage,
     fetchChatMessage,
-    updateMessage,
-    toggleReaction,
-    updateTyping,
+    markMessagesRead,
 } = require("./user-socket-handler");
 const passport = require("passport");
+const Server = require("../services/Server");
+const sobj = new Server();
 const attachCallHandlers = require("./call-handler");
 
 module.exports = (server, sessionMiddleware) => {
@@ -26,7 +26,6 @@ module.exports = (server, sessionMiddleware) => {
             return;
         }
 
-        socket.join(`user-${user.id}`);
         attachCallHandlers(io, socket, user);
         const isFirstConnection = addUserConnection(socket.id, user.contactNo);
         let initialPresenceReady = Promise.resolve();
@@ -58,6 +57,13 @@ module.exports = (server, sessionMiddleware) => {
                 return;
             }
 
+            if (user.role !== "admin" && !(await sobj.isFeatureEnabled(user, "presence"))) {
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: false, message: "Presence changes are currently disabled." });
+                }
+                return;
+            }
+
             try {
                 await initialPresenceReady;
                 await updatePresence(io, user, status);
@@ -70,6 +76,29 @@ module.exports = (server, sessionMiddleware) => {
                 if (typeof acknowledge === "function") {
                     acknowledge({ ok: false, message: "Your presence could not be updated." });
                 }
+            }
+        });
+
+        socket.on("typing", async (data) => {
+            const to = data && typeof data.to === "string" ? data.to.trim() : "";
+            if (!to || to.length > 64 || to === user.contactNo) {
+                return;
+            }
+
+            try {
+                if (user.role !== "admin" && !(await sobj.isFeatureEnabled(user, "messaging"))) {
+                    return;
+                }
+                const recipient = await sobj.getUserByContactNo(to);
+                if (!recipient || !recipient.isActive) {
+                    return;
+                }
+                io.to(`user-${recipient.id}`).emit("typing", {
+                    from: user.contactNo,
+                    isTyping: Boolean(data.isTyping),
+                });
+            } catch (error) {
+                console.error("Failed to forward typing status:", error);
             }
         });
 
@@ -89,6 +118,20 @@ module.exports = (server, sessionMiddleware) => {
             }
         });
 
+        socket.on("messages-read", async (data, acknowledge) => {
+            try {
+                const ids = await markMessagesRead(io, data, user);
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: true, ids });
+                }
+            } catch (error) {
+                console.error("Failed to mark messages as read:", error);
+                if (typeof acknowledge === "function") {
+                    acknowledge({ ok: false, message: "Messages could not be marked as read." });
+                }
+            }
+        });
+
         socket.on("load-message", async (data, onDataLoaded) => {
             try {
                 const result = await fetchChatMessage(io, socket, data, user);
@@ -98,38 +141,6 @@ module.exports = (server, sessionMiddleware) => {
             } catch (error) {
                 console.error("Failed to load chat history:", error);
                 socket.emit("message-error", "Chat history could not be loaded.");
-            }
-        });
-
-        socket.on("message:update", async (data, acknowledge) => {
-            try {
-                const message = await updateMessage(io, socket, data, user);
-                if (typeof acknowledge === "function") acknowledge({ ok: true, message });
-            } catch (error) {
-                console.error("Failed to update chat message:", error);
-                if (typeof acknowledge === "function") {
-                    acknowledge({ ok: false, message: "The message could not be updated." });
-                }
-            }
-        });
-
-        socket.on("message:react", async (data, acknowledge) => {
-            try {
-                const reactions = await toggleReaction(io, data, user);
-                if (typeof acknowledge === "function") acknowledge({ ok: true, reactions });
-            } catch (error) {
-                console.error("Failed to update message reaction:", error);
-                if (typeof acknowledge === "function") {
-                    acknowledge({ ok: false, message: "The reaction could not be saved." });
-                }
-            }
-        });
-
-        socket.on("chat:typing", async (data) => {
-            try {
-                await updateTyping(io, socket, data, user);
-            } catch (error) {
-                console.error("Failed to send typing indicator:", error);
             }
         });
     });

@@ -6,8 +6,11 @@
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         <meta name="description" content="" />
         <meta name="author" content="" />
-        <title>Login - SB Admin</title>
+        <title>ChatConnect</title>
         <link href="/stylesheets/login.css" rel="stylesheet" />
+        <style>
+            body.bg-primary { background: #00a884 !important; }
+        </style>
         <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
     </head>
     <body class="bg-primary">
@@ -18,7 +21,7 @@
                         <div class="row justify-content-center">
                             <div class="col-lg-5">
                                 <div class="card shadow-lg border-0 rounded-lg mt-5">
-                                    <div class="card-header"><h3 class="text-center font-weight-light my-4">Login</h3></div>
+                                    <div class="card-header"><h3 class="text-center font-weight-light my-4">ChatConnect</h3></div>
                                     <div class="card-body">
 
                                         <% if (typeof messages !== 'undefined' && messages.length > 0) { %>
@@ -42,9 +45,17 @@
                                             </div>
                                             <div class="d-flex align-items-center justify-content-between mt-4 mb-0">
                                                 <a class="small" href="/password">Forgot Password?</a>
-                                                <button type="submit" class="btn btn-primary">Login</a>
+                                                <button type="submit" class="btn btn-primary">Login</button>
                                             </div>
                                         </form>
+                                        <div class="mt-4">
+                                            <button id="wallet-login-button" type="button" class="btn btn-outline-success w-100">
+                                                Sign in with wallet
+                                            </button>
+                                            <p id="wallet-auth-message" class="small text-center mt-2" role="status" aria-live="polite">
+                                                Use a wallet already linked to your ChatConnect account.
+                                            </p>
+                                        </div>
                                     </div>
                                     <div class="card-footer text-center py-3">
                                         <div class="small"><a href="/register">Need an account? Sign up!</a></div>
@@ -71,5 +82,6 @@
             </div>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+        <script src="/javascripts/wallet-auth.js"></script>
     </body>
 </html>

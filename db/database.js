@@ -1,4 +1,5 @@
 const { Pool } = require("pg");
+const { FEATURE_KEYS } = require("../services/featurePermissions");
 
 if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required to connect to PostgreSQL.");
@@ -25,6 +26,7 @@ const initializeDatabase = async () => {
             about TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL DEFAULT 'offline',
             preview TEXT,
+            wallet_address TEXT,
             password TEXT NOT NULL
         )
     `);
@@ -32,6 +34,15 @@ const initializeDatabase = async () => {
     await pool.query(`
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS about TEXT NOT NULL DEFAULT ''
+    `);
+    await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS wallet_address TEXT
+    `);
+    await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS users_wallet_address_unique
+        ON users (wallet_address)
+        WHERE wallet_address IS NOT NULL
     `);
 
     await pool.query(`
@@ -55,6 +66,19 @@ const initializeDatabase = async () => {
     }
 
     await pool.query(`
+        CREATE TABLE IF NOT EXISTS app_feature_permissions (
+            feature TEXT PRIMARY KEY,
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE
+        )
+    `);
+    await pool.query(
+        `INSERT INTO app_feature_permissions (feature, is_enabled)
+         SELECT feature, TRUE FROM unnest($1::text[]) AS features(feature)
+         ON CONFLICT (feature) DO NOTHING`,
+        [FEATURE_KEYS]
+    );
+
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS chat_messages (
             id BIGSERIAL PRIMARY KEY,
             from_contact_no TEXT NOT NULL,
@@ -62,14 +86,15 @@ const initializeDatabase = async () => {
             img TEXT NOT NULL,
             type TEXT NOT NULL DEFAULT 'text',
             message TEXT NOT NULL,
-            datetime TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            datetime TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            delivered_at TIMESTAMPTZ,
+            read_at TIMESTAMPTZ
         )
     `);
-
     await pool.query(`
         ALTER TABLE chat_messages
-        ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
+        ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ
     `);
 
     await pool.query(`
@@ -107,68 +132,8 @@ const initializeDatabase = async () => {
     `);
 
     await pool.query(`
-        ALTER TABLE chat_group_messages
-        ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
-    `);
-
-    await pool.query(`
         CREATE INDEX IF NOT EXISTS chat_group_messages_group_datetime_idx
         ON chat_group_messages (group_id, datetime)
-    `);
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS chat_message_receipts (
-            chat_type TEXT NOT NULL CHECK (chat_type IN ('direct', 'group')),
-            message_id BIGINT NOT NULL,
-            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            delivered_at TIMESTAMPTZ,
-            read_at TIMESTAMPTZ,
-            PRIMARY KEY (chat_type, message_id, user_id)
-        )
-    `);
-
-    await pool.query(`
-        CREATE INDEX IF NOT EXISTS chat_message_receipts_user_unread_idx
-        ON chat_message_receipts (user_id, chat_type, read_at)
-    `);
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS chat_message_reactions (
-            chat_type TEXT NOT NULL CHECK (chat_type IN ('direct', 'group')),
-            message_id BIGINT NOT NULL,
-            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            emoji TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (chat_type, message_id, user_id, emoji)
-        )
-    `);
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS user_chat_preferences (
-            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            chat_type TEXT NOT NULL CHECK (chat_type IN ('direct', 'group')),
-            conversation_id TEXT NOT NULL,
-            is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
-            is_archived BOOLEAN NOT NULL DEFAULT FALSE,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, chat_type, conversation_id)
-        )
-    `);
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS user_statuses (
-            id BIGSERIAL PRIMARY KEY,
-            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            content TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMPTZ NOT NULL
-        )
-    `);
-
-    await pool.query(`
-        CREATE INDEX IF NOT EXISTS user_statuses_expiration_idx
-        ON user_statuses (expires_at, user_id)
     `);
 };
 

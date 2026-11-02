@@ -9,10 +9,18 @@ const Server = require('../services/Server')
 const sobj = new Server()
 const { register } = require('../controller/register')
 const { profilePictureUpload } = require("../services/profilePictureUpload");
+const { FEATURE_PERMISSIONS, FEATURE_KEYS } = require("../services/featurePermissions");
+const { normalizeWalletAddress, verifyWalletChallenge } = require("../services/walletAuthentication");
 
 router.use(flash());
 
 router.use(requireAuth);
+
+const WALLET_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+
+const saveSession = (req) => new Promise((resolve, reject) => {
+    req.session.save((error) => error ? reject(error) : resolve());
+});
 
 const isValidAdminCsrfToken = (sessionToken, submittedToken) => {
     if (typeof sessionToken !== "string" || typeof submittedToken !== "string") {
@@ -21,6 +29,138 @@ const isValidAdminCsrfToken = (sessionToken, submittedToken) => {
     const expected = Buffer.from(sessionToken);
     const submitted = Buffer.from(submittedToken);
     return expected.length === submitted.length && timingSafeEqual(expected, submitted);
+};
+
+router.post("/wallet/challenge", async (req, res, next) => {
+    const address = normalizeWalletAddress(req.body && req.body.address);
+    const purpose = req.body && req.body.purpose;
+    if (!address || !["login", "link"].includes(purpose)) {
+        return res.status(400).json({ error: "Provide a valid wallet address and action." });
+    }
+    if (purpose === "link" && !req.user) {
+        return res.status(401).json({ error: "Sign in before linking a wallet." });
+    }
+    if (purpose === "link" && !req.user.isActive) {
+        return res.status(403).json({ error: "This account has been disabled." });
+    }
+
+    try {
+        const origin = new URL(process.env.APP_URL || `${req.protocol}://${req.get("host")}`).origin;
+        const issuedAt = new Date();
+        const expiration = new Date(issuedAt.getTime() + WALLET_CHALLENGE_TTL_MS);
+        const nonce = randomBytes(16).toString("hex");
+        const action = purpose === "link" ? "link this wallet to your ChatConnect account" : "sign in to ChatConnect";
+        const message = [
+            `${new URL(origin).host} wants you to sign in with Ethereum:`,
+            address,
+            "",
+            `Sign this one-time message to ${action}.`,
+            "",
+            `URI: ${origin}`,
+            "Version: 1",
+            `Nonce: ${nonce}`,
+            `Issued At: ${issuedAt.toISOString()}`,
+            `Expiration Time: ${expiration.toISOString()}`,
+        ].join("\n");
+
+        req.session.walletChallenge = {
+            address,
+            purpose,
+            userId: purpose === "link" ? String(req.user.id) : null,
+            message,
+            expiresAt: expiration.getTime(),
+        };
+        await saveSession(req);
+        return res.json({ message });
+    } catch (error) {
+        return next(error);
+    }
+});
+
+router.post("/wallet/login", async (req, res, next) => {
+    const challenge = req.session.walletChallenge;
+    const address = normalizeWalletAddress(req.body && req.body.address);
+    const signature = req.body && req.body.signature;
+    req.session.walletChallenge = null;
+
+    try {
+        await saveSession(req);
+        if (
+            !challenge ||
+            challenge.purpose !== "login" ||
+            challenge.expiresAt < Date.now() ||
+            !address ||
+            address !== challenge.address ||
+            !verifyWalletChallenge(challenge.message, signature, address)
+        ) {
+            return res.status(401).json({ error: "Wallet signature is invalid or expired. Please try again." });
+        }
+
+        const user = await sobj.getUserByWalletAddress(address);
+        if (!user) {
+            return res.status(404).json({ error: "This wallet is not linked to an account. Sign in with your phone number and link it first." });
+        }
+        if (!user.isActive) {
+            return res.status(403).json({ error: "This account has been disabled. Contact an administrator." });
+        }
+
+        return req.logIn(user, (error) => {
+            if (error) return next(error);
+            return res.json({ ok: true, redirect: "/" });
+        });
+    } catch (error) {
+        return next(error);
+    }
+});
+
+router.post("/wallet/link", async (req, res, next) => {
+    const challenge = req.session.walletChallenge;
+    const address = normalizeWalletAddress(req.body && req.body.address);
+    const signature = req.body && req.body.signature;
+    req.session.walletChallenge = null;
+
+    try {
+        await saveSession(req);
+        if (
+            !req.user ||
+            !req.user.isActive ||
+            !challenge ||
+            challenge.purpose !== "link" ||
+            challenge.userId !== String(req.user.id) ||
+            challenge.expiresAt < Date.now() ||
+            !address ||
+            address !== challenge.address ||
+            !verifyWalletChallenge(challenge.message, signature, address)
+        ) {
+            const status = req.user && !req.user.isActive ? 403 : 401;
+            const error = status === 403
+                ? "This account has been disabled."
+                : "Wallet signature is invalid or expired. Please try again.";
+            return res.status(status).json({ error });
+        }
+
+        const linkedWallet = await sobj.linkWalletAddress(req.user.id, address);
+        if (!linkedWallet) {
+            return res.status(409).json({ error: "This account already has a different wallet linked." });
+        }
+        return res.json({ ok: true, address: linkedWallet.walletAddress });
+    } catch (error) {
+        if (error.code === "23505") {
+            return res.status(409).json({ error: "This wallet is already linked to another account." });
+        }
+        return next(error);
+    }
+});
+
+const requireFeature = (feature) => async (req, res, next) => {
+    try {
+        if (!(await sobj.isFeatureEnabled(req.user, feature))) {
+            return res.status(403).send("This feature is currently disabled by an administrator.");
+        }
+        return next();
+    } catch (error) {
+        return next(error);
+    }
 };
 
 router.get("/ice-servers", (req, res) => {
@@ -107,23 +247,29 @@ router.post("/register", profilePictureUpload, handleProfilePictureUploadError, 
 router.get("/index", async (req, res, next) => {
     try {
         const user = req.user;
-        const [usersData, groups, adminUsers, chatPreferences, statuses] = await Promise.all([
+        const [usersData, allGroups, adminUsers, featureSettings] = await Promise.all([
             sobj.fetchAllUser(),
             sobj.fetchGroupsForUser(user.id),
             user.role === "admin" ? sobj.fetchAdminUsers() : Promise.resolve([]),
-            sobj.fetchChatPreferences(user.id),
-            sobj.fetchUserStatuses(),
+            sobj.getFeatureSettings(),
         ]);
+        const featurePermissions = user.role === "admin"
+            ? FEATURE_KEYS.reduce((features, key) => {
+                features[key] = true;
+                return features;
+            }, {})
+            : featureSettings;
         if (user.role === "admin" && !req.session.adminCsrfToken) {
             req.session.adminCsrfToken = randomBytes(32).toString("hex");
         }
         res.render("index", {
             user,
             contacts: usersData,
-            groups,
-            chatPreferences,
-            statuses,
+            groups: featurePermissions.groups ? allGroups : [],
             adminUsers,
+            featurePermissions,
+            featureSettings,
+            featureDefinitions: FEATURE_PERMISSIONS,
             adminCsrfToken: user.role === "admin" ? req.session.adminCsrfToken : "",
             groupSuccess: req.flash("groupSuccess")[0],
             groupError: req.flash("groupError")[0],
@@ -131,9 +277,41 @@ router.get("/index", async (req, res, next) => {
             profileError: req.flash("profileError")[0],
             adminSuccess: req.flash("adminSuccess")[0],
             adminError: req.flash("adminError")[0],
+            featureSuccess: req.flash("featureSuccess")[0],
+            featureError: req.flash("featureError")[0],
         });
     } catch (error) {
         next(error);
+    }
+});
+
+router.post("/admin/feature-permissions", requireAdmin, async (req, res, next) => {
+    if (!isValidAdminCsrfToken(req.session.adminCsrfToken, req.body.csrfToken)) {
+        return res.status(403).send("Your session token is invalid. Reload the page and try again.");
+    }
+
+    const submittedFeatures = req.body.featurePermissions &&
+        typeof req.body.featurePermissions === "object" &&
+        !Array.isArray(req.body.featurePermissions)
+        ? req.body.featurePermissions
+        : {};
+    const enabledFeatures = FEATURE_KEYS.filter((feature) =>
+        submittedFeatures[feature] === "on"
+    );
+
+    try {
+        const result = await sobj.updateFeatureSettings(req.user.id, enabledFeatures);
+        if (!result.ok) {
+            req.flash("featureError", result.message);
+            return res.redirect("/index");
+        }
+
+        const io = req.app.get("io");
+        if (io) io.emit("feature-permissions:updated", result.settings);
+        req.flash("featureSuccess", "Feature access settings were updated.");
+        return res.redirect("/index");
+    } catch (error) {
+        return next(error);
     }
 });
 
@@ -178,7 +356,7 @@ router.post("/admin/users/:id/access", requireAdmin, async (req, res, next) => {
     }
 });
 
-router.post("/profile", async (req, res, next) => {
+router.post("/profile", requireFeature("profile"), async (req, res, next) => {
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
     const about = typeof req.body.about === "string" ? req.body.about.trim() : "";
 
@@ -201,7 +379,7 @@ router.post("/profile", async (req, res, next) => {
     }
 });
 
-router.post("/profile-picture", profilePictureUpload, handleProfilePictureUploadError, async (req, res, next) => {
+router.post("/profile-picture", requireFeature("profile"), profilePictureUpload, handleProfilePictureUploadError, async (req, res, next) => {
     if (!req.profilePicture) {
         return res.status(400).json({ error: "Choose an image to upload." });
     }
@@ -232,53 +410,7 @@ router.post("/profile-picture", profilePictureUpload, handleProfilePictureUpload
     }
 });
 
-router.get("/statuses", async (req, res, next) => {
-    try {
-        res.set("Cache-Control", "no-store");
-        res.json({ statuses: await sobj.fetchUserStatuses() });
-    } catch (error) {
-        next(error);
-    }
-});
-
-router.post("/statuses", async (req, res, next) => {
-    const body = req.body || {};
-    const content = typeof body.content === "string" ? body.content.trim() : "";
-    if (!content || content.length > 280) {
-        return res.status(400).json({ error: "Status updates must be 1 to 280 characters." });
-    }
-    try {
-        const status = await sobj.createUserStatus(req.user.id, content);
-        res.status(201).json({ status });
-    } catch (error) {
-        next(error);
-    }
-});
-
-router.post("/chat-preferences", async (req, res, next) => {
-    const { chatType, conversationId, preference, value } = req.body || {};
-    if (!["direct", "group"].includes(chatType) ||
-        typeof conversationId !== "string" || !conversationId ||
-        !["pinned", "archived"].includes(preference) ||
-        typeof value !== "boolean" ||
-        (chatType === "group" && !/^[1-9]\d*$/.test(conversationId)) ||
-        (chatType === "direct" && conversationId.length > 64)) {
-        return res.status(400).json({ error: "Invalid chat preference." });
-    }
-    try {
-        const result = await sobj.updateChatPreference(
-            req.user.id, chatType, conversationId, preference, value
-        );
-        res.json({ preference: result });
-    } catch (error) {
-        if (error.message.includes("not available")) {
-            return res.status(404).json({ error: error.message });
-        }
-        next(error);
-    }
-});
-
-router.get("/search", async (req, res, next) => {
+router.get("/search", requireFeature("search"), async (req, res, next) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query.length > 80) {
         return res.status(400).json({ error: "Search terms must be 80 characters or fewer." });
@@ -296,7 +428,7 @@ router.get("/search", async (req, res, next) => {
     }
 });
 
-router.post("/groups", async (req, res, next) => {
+router.post("/groups", requireFeature("groups"), async (req, res, next) => {
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
     const submittedIds = req.body.memberIds === undefined
         ? []
