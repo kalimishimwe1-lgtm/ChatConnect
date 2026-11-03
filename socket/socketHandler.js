@@ -26,6 +26,7 @@ module.exports = (server, sessionMiddleware) => {
             return;
         }
 
+        socket.join(`user-${user.id}`);
         attachCallHandlers(io, socket, user);
         const isFirstConnection = addUserConnection(socket.id, user.contactNo);
         let initialPresenceReady = Promise.resolve();
