@@ -92,7 +92,10 @@ exports.sendMessage = async (io, socket, data, user) => {
             message,
             datetime: saved.datetime,
         };
-        socket.to(`group-${groupId}`).emit("receive-message", savedMessage);
+        const members = await sobj.fetchGroupMembers(groupId);
+        for (const member of members) {
+            io.to(`user-${member.id}`).emit("receive-message", savedMessage);
+        }
         return savedMessage;
     }
 
