@@ -1,24 +1,140 @@
-const mongoose = require("mongoose");
+const { Pool } = require("pg");
+const { FEATURE_KEYS } = require("../services/featurePermissions");
 
-const userSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    contactNo: { type: String, required: true, unique: true },
-    img: { type: String, required: true },
-    status: { type: String, default: "offline" },
-    preview: { type: String },
-    Password: { type: String, required: true },
+if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required to connect to PostgreSQL.");
+}
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 5,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
 });
 
-const chatSchema = new mongoose.Schema({
-    from: { type: String, required: true },
-    to: { type: String, required: true },
-    img: { type: String, required: true },
-    type: {type: String, required: true, default:"text"},
-    message: { type: String, required: true },
-    datetime: { type: Date, default: Date.now },
+pool.on("error", (error) => {
+    console.error("Unexpected PostgreSQL pool error:", error);
 });
 
-const User = mongoose.model("User", userSchema);
-const Chat = mongoose.model("Chat", chatSchema);
+const initializeDatabase = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            contact_no TEXT NOT NULL UNIQUE,
+            img TEXT NOT NULL,
+            about TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'offline',
+            preview TEXT,
+            wallet_address TEXT,
+            password TEXT NOT NULL
+        )
+    `);
 
-module.exports = { User, Chat };
+    await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS about TEXT NOT NULL DEFAULT ''
+    `);
+    await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS wallet_address TEXT
+    `);
+    await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS users_wallet_address_unique
+        ON users (wallet_address)
+        WHERE wallet_address IS NOT NULL
+    `);
+
+    await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user',
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+
+    const adminContactNos = [...new Set(
+        (process.env.ADMIN_CONTACT_NOS || "")
+            .split(",")
+            .map((contactNo) => contactNo.trim())
+            .filter(Boolean)
+    )];
+    if (adminContactNos.length) {
+        await pool.query(
+            `UPDATE users SET role = 'admin', is_active = TRUE
+             WHERE contact_no = ANY($1::text[])`,
+            [adminContactNos]
+        );
+    }
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS app_feature_permissions (
+            feature TEXT PRIMARY KEY,
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE
+        )
+    `);
+    await pool.query(
+        `INSERT INTO app_feature_permissions (feature, is_enabled)
+         SELECT feature, TRUE FROM unnest($1::text[]) AS features(feature)
+         ON CONFLICT (feature) DO NOTHING`,
+        [FEATURE_KEYS]
+    );
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id BIGSERIAL PRIMARY KEY,
+            from_contact_no TEXT NOT NULL,
+            to_contact_no TEXT NOT NULL,
+            img TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'text',
+            message TEXT NOT NULL,
+            datetime TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            delivered_at TIMESTAMPTZ,
+            read_at TIMESTAMPTZ
+        )
+    `);
+    await pool.query(`
+        ALTER TABLE chat_messages
+        ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_groups (
+            id BIGSERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_group_members (
+            group_id BIGINT NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id)
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS chat_group_members_user_id_idx
+        ON chat_group_members (user_id, group_id)
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_group_messages (
+            id BIGSERIAL PRIMARY KEY,
+            group_id BIGINT NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+            sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type TEXT NOT NULL DEFAULT 'text',
+            message TEXT NOT NULL,
+            datetime TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS chat_group_messages_group_datetime_idx
+        ON chat_group_messages (group_id, datetime)
+    `);
+};
+
+module.exports = { pool, initializeDatabase };

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>ChatConnect</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet prefetch" href="https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css">
+    <link rel="stylesheet prefetch" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.2/css/font-awesome.min.css">
+    <link href="/stylesheets/style.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+</head>
+<body>
+    <div class="wa-bg"></div>
+    <div id="frame">
+        <div id="sidepanel">
+            <div id="profile">
+                <div class="wrap">
+                    <img id="profile-img" src="/images/default-profile.svg" class="online" alt="You's profile picture" />
+                    <p id="name">You</p>
+                    <div class="profile-actions">
+                        <button type="button" class="icon-btn" id="new-chat-btn" title="New group"><i class="fa fa-users" aria-hidden="true"></i></button>
+                        <button type="button" class="icon-btn expand-button" title="Profile"><i class="fa fa-ellipsis-v" aria-hidden="true"></i></button>
+                    </div>
+                    <div id="status-options">
+                        <ul>
+                            <li id="status-online" class="active"><span class="status-circle"></span> <p>Online</p></li>
+                            <li id="status-away"><span class="status-circle"></span> <p>Away</p></li>
+                            <li id="status-busy"><span class="status-circle"></span> <p>Busy</p></li>
+                            <li id="status-offline"><span class="status-circle"></span> <p>Offline</p></li>
+                        </ul>
+                    </div>
+                    <div id="expanded">
+                        <label for="contact"><i class="fa fa-phone fa-fw" aria-hidden="true"></i></label>
+                        <input name="contact" type="text" value="1111111111" disabled />
+                        <form id="profile-picture-form" enctype="multipart/form-data">
+                            <label class="profile-picture-label" for="profilePicture">
+                                <i class="fa fa-camera fa-fw" aria-hidden="true"></i> Change photo
+                            </label>
+                            <input id="profilePicture" name="profilePicture" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+                            <p id="profile-picture-message" role="status" aria-live="polite"></p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div id="search">
+                <label for="chat-search"><i class="fa fa-search" aria-hidden="true"></i></label>
+                <input id="chat-search" type="search" placeholder="Search or start a new chat" autocomplete="off" />
+            </div>
+            <div id="contacts">
+                <ul>
+                    
+                            <li class="contact" data-contact-no="2222222222" onclick="showUserInMainPanel({&#34;name&#34;:&#34;Alice&#34;,&#34;contactNo&#34;:&#34;2222222222&#34;,&#34;img&#34;:&#34;/images/default-profile.svg&#34;,&#34;status&#34;:&#34;online&#34;,&#34;preview&#34;:&#34;Hey, are you coming?&#34;})">
+                                <div class="wrap">
+                                    <span class="contact-status online"></span>
+                                    <img src="/images/default-profile.svg" alt="" />
+                                    <div class="meta">
+                                        <div class="meta-top">
+                                            <p class="name">Alice</p>
+                                            <span class="chat-time"></span>
+                                        </div>
+                                        <div class="meta-bottom">
+                                            <p id="2222222222" class="preview">Hey, are you coming?</p>
+                                            <span class="unread-badge" hidden>0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                    
+                            <li class="contact" data-contact-no="3333333333" onclick="showUserInMainPanel({&#34;name&#34;:&#34;Brian&#34;,&#34;contactNo&#34;:&#34;3333333333&#34;,&#34;img&#34;:&#34;/images/default-profile.svg&#34;,&#34;status&#34;:&#34;offline&#34;,&#34;preview&#34;:&#34;Photo&#34;})">
+                                <div class="wrap">
+                                    <span class="contact-status offline"></span>
+                                    <img src="/images/default-profile.svg" alt="" />
+                                    <div class="meta">
+                                        <div class="meta-top">
+                                            <p class="name">Brian</p>
+                                            <span class="chat-time"></span>
+                                        </div>
+                                        <div class="meta-bottom">
+                                            <p id="3333333333" class="preview">Photo</p>
+                                            <span class="unread-badge" hidden>0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                    
+                </ul>
+            </div>
+            <div id="bottom-bar">
+                <button id="joinroom" type="button">
+                    <i class="fa fa-users fa-fw" aria-hidden="true"></i>
+                    <span>Group</span>
+                </button>
+				<button type="button" onclick="logout()">
+					<i class="fa fa-sign-out fa-fw" aria-hidden="true"></i>
+					<span>Logout</span>
+				</button>
+            </div>
+        </div>
+        <div class="content">
+			<div class="container">
+				<div class="row justify-content-center">
+					<div id="selectChatMessage">
+                        <div class="intro-logo">
+                            <i class="fa fa-comments" aria-hidden="true"></i>
+                        </div>
+						<p class="intro-title">ChatConnect for Web</p>
+                        <p class="intro-copy">Send and receive messages with ConnectChat. Select a chat to get started.</p>
+					</div>
+				</div>
+			</div>
+			<div class="contact-profile">
+                <button type="button" class="icon-btn back-chat" id="back-to-chats" title="Back" aria-label="Back to chats">
+                    <i class="fa fa-arrow-left" aria-hidden="true"></i>
+                </button>
+				<img src="/images/default-profile.svg" alt="" />
+				<p>
+					<span class="name">Chat</span>
+					<span class="small text d-block mt-3 chat-phone"></span>
+                    <span class="chat-presence">click here for contact info</span>
+				</p>
+				<div class="social-media">
+                    <button type="button" class="icon-btn" title="Search in chat" id="search-in-chat"><i class="fa fa-search" aria-hidden="true"></i></button>
+					<button type="button" class="icon-btn" title="More"><i class="fa fa-ellipsis-v" aria-hidden="true"></i></button>
+				</div>
+			</div>
+			<div class="messages">
+				<ul></ul>
+                <div id="typing-indicator" hidden>
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+			</div>
+			<div class="message-input">
+                <div id="emoji-picker" hidden></div>
+				<div class="wrap">
+                <button type="button" class="icon-btn emoji-toggle" id="emoji-toggle" title="Emoji"><i class="fa fa-smile-o" aria-hidden="true"></i></button>
+				<input type="text" id="message-box" placeholder="Type a message" autocomplete="off" />
+				<label for="fileInput" class="fa fa-paperclip attachment" aria-hidden="true" title="Attach"></label>
+                <input type="file" accept="image/*" id="fileInput" style="display: none;" onchange="selectFile(event)">
+				<button class="submit" type="button" title="Send"><i class="fa fa-paper-plane" aria-hidden="true"></i></button>
+				</div>
+			</div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/javascripts/scripts.js"></script>
+    <script src="/javascripts/socket-client.js"></script>
+</body>
+</html>

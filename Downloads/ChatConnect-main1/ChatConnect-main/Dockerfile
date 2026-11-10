@@ -10,7 +10,7 @@ WORKDIR /ChatConnect
 COPY package*.json ./
 
 # Install Node.js dependencies
-RUN npm install
+RUN npm ci --omit=dev
 
 # Copy application files and directories to the container
 COPY db/ db/
@@ -21,7 +21,6 @@ COPY routes/ routes/
 COPY services/ services/
 COPY public/ public/
 COPY app.js app.js
-COPY redis/ redis/
 COPY socket/ socket/
 
 # Specify the command to run the application

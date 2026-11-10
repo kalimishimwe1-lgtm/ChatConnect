@@ -13,6 +13,9 @@ passport.use(
                 if (user == null) {
                     return done(null, false, "No user found with that phone number");
                 }
+                if (!user.isActive) {
+                    return done(null, false, "This account has been disabled. Contact an administrator.");
+                }
             
                 if (bcrypt.compareSync(password, user.Password)) {
                     return done(null, user);

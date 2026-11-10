@@ -1,80 +1,534 @@
-const { User, Chat } = require("../db/database");
-const bcrypt = require('bcrypt')
+const { pool } = require("../db/database");
+const bcrypt = require("bcrypt");
+const { FEATURE_KEYS } = require("./featurePermissions");
+
+const userFields = `
+    id,
+    name,
+    contact_no AS "contactNo",
+    img,
+    about,
+    status,
+    preview,
+    role,
+    is_active AS "isActive",
+    wallet_address AS "walletAddress",
+    password AS "Password"
+`;
 
 class Server {
-    
     getUserByContactNo = async (contactNo) => {
-        try {
-            const user = await User.findOne({ contactNo })
-            return user;
-        } catch (error) {
-            console.error(error.message);
-            throw new Error("User not found");
-        }
+        const result = await pool.query(
+            `SELECT ${userFields} FROM users WHERE contact_no = $1`,
+            [contactNo]
+        );
+        return result.rows[0] || null;
+    };
+
+    getUserByWalletAddress = async (walletAddress) => {
+        const result = await pool.query(
+            `SELECT ${userFields}
+             FROM users
+             WHERE wallet_address = $1`,
+            [walletAddress.toLowerCase()]
+        );
+        return result.rows[0] || null;
+    };
+
+    linkWalletAddress = async (userId, walletAddress) => {
+        const result = await pool.query(
+            `UPDATE users
+             SET wallet_address = $2
+             WHERE id = $1
+               AND (wallet_address IS NULL OR wallet_address = $2)
+             RETURNING wallet_address AS "walletAddress"`,
+            [userId, walletAddress.toLowerCase()]
+        );
+        return result.rows[0] || null;
     };
 
     createAccount = async (data) => {
-        try {
-            const hashpassword = bcrypt.hashSync(data.Password, 10);
-            
-            const registerUser = new User({
-                "name": data.name,
-                "contactNo": data.contactNo,
-                "img": data.img,
-                preview: "Hey",
-                "Password": hashpassword
-            });
-            await registerUser.save()
-        } catch (err) {
-            throw { error: err.message, hasError: true };
-        }
-    }
+        const hashedPassword = await bcrypt.hash(data.Password, 10);
+        await pool.query(
+            `INSERT INTO users (name, contact_no, img, preview, password)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [data.name, data.contactNo, data.img, "Hey", hashedPassword]
+        );
+    };
 
     getUserById = async (id) => {
-        try {
-            const user = await User.findOne({ _id: id })
-            if (user !== null) return user;
-        } catch (error) {
-            console.error(error.message);
-            throw new Error("User not found");
-        }
+        const result = await pool.query(
+            `SELECT ${userFields} FROM users WHERE id::text = $1`,
+            [String(id)]
+        );
+        return result.rows[0] || null;
+    };
+
+    isUserActive = async (userId) => {
+        const result = await pool.query(
+            `SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE`,
+            [userId]
+        );
+        return result.rowCount > 0;
     };
 
     fetchAllUser = async () => {
+        const result = await pool.query(`
+            SELECT id, name, contact_no AS "contactNo", img, about, status, preview
+            FROM users
+            WHERE is_active = TRUE
+            ORDER BY id
+        `);
+        return result.rows;
+    };
+
+    fetchAdminUsers = async () => {
+        const result = await pool.query(`
+            SELECT id::text AS id, name, contact_no AS "contactNo",
+                   role, is_active AS "isActive"
+            FROM users
+            ORDER BY id
+        `);
+        return result.rows;
+    };
+
+    getFeatureSettings = async () => {
+        const result = await pool.query(
+            `SELECT feature, is_enabled AS "isEnabled"
+             FROM app_feature_permissions`
+        );
+        return FEATURE_KEYS.reduce((settings, feature) => {
+            const setting = result.rows.find((row) => row.feature === feature);
+            settings[feature] = setting ? setting.isEnabled : true;
+            return settings;
+        }, {});
+    };
+
+    isFeatureEnabled = async (user, feature) => {
+        if (user.role === "admin") return true;
+        if (!FEATURE_KEYS.includes(feature)) {
+            throw new Error(`Unknown feature permission: ${feature}`);
+        }
+        const result = await pool.query(
+            `SELECT is_enabled AS "isEnabled"
+             FROM app_feature_permissions WHERE feature = $1`,
+            [feature]
+        );
+        return result.rows.length === 0 || result.rows[0].isEnabled;
+    };
+
+    updateFeatureSettings = async (adminId, enabledFeatures) => {
+        const client = await pool.connect();
         try {
-            const users = await User.find();
-            return users;
+            await client.query("BEGIN");
+            await client.query("SELECT pg_advisory_xact_lock(734829102)");
+            const admin = await client.query(
+                `SELECT role, is_active AS "isActive" FROM users WHERE id = $1`,
+                [adminId]
+            );
+            if (
+                !admin.rows[0] ||
+                admin.rows[0].role !== "admin" ||
+                !admin.rows[0].isActive
+            ) {
+                await client.query("ROLLBACK");
+                return { ok: false, status: 403, message: "Administrator access is required." };
+            }
+
+            const validFeatures = [...new Set(enabledFeatures)]
+                .filter((feature) => FEATURE_KEYS.includes(feature));
+            await client.query(
+                `UPDATE app_feature_permissions
+                 SET is_enabled = feature = ANY($1::text[])`,
+                [validFeatures]
+            );
+            const settingsResult = await client.query(
+                `SELECT feature, is_enabled AS "isEnabled"
+                 FROM app_feature_permissions`
+            );
+            const settings = FEATURE_KEYS.reduce((values, feature) => {
+                const setting = settingsResult.rows.find((row) => row.feature === feature);
+                values[feature] = setting ? setting.isEnabled : true;
+                return values;
+            }, {});
+            await client.query("COMMIT");
+            return { ok: true, settings };
         } catch (error) {
+            await client.query("ROLLBACK");
             throw error;
+        } finally {
+            client.release();
         }
     };
-    
-    fetchChatMessage = async (detail) => {
-        try {
-            const chats = await Chat.find({
-                $or: [
-                    { from: detail.from, to: detail.to },
-                    { from: detail.to, to: detail.from }
-                ]
-            }, { _id: 0, __v: 0 });            
-            
-            if (!chats) throw new Error("Chats not found");
 
-            return chats;
+    updateUserAccess = async (adminId, targetId, role, isActive) => {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            await client.query("SELECT pg_advisory_xact_lock(734829102)");
+
+            const adminResult = await client.query(
+                `SELECT role, is_active AS "isActive"
+                 FROM users WHERE id = $1`,
+                [adminId]
+            );
+            if (
+                !adminResult.rows[0] ||
+                adminResult.rows[0].role !== "admin" ||
+                !adminResult.rows[0].isActive
+            ) {
+                await client.query("ROLLBACK");
+                return { ok: false, status: 403, message: "Administrator access is required." };
+            }
+            if (String(adminId) === String(targetId)) {
+                await client.query("ROLLBACK");
+                return { ok: false, status: 400, message: "You cannot change your own role or access." };
+            }
+
+            const targetResult = await client.query(
+                `SELECT role, is_active AS "isActive"
+                 FROM users WHERE id = $1`,
+                [targetId]
+            );
+            if (!targetResult.rows[0]) {
+                await client.query("ROLLBACK");
+                return { ok: false, status: 404, message: "That user account was not found." };
+            }
+
+            if (role !== "admin" || !isActive) {
+                const remainingAdmins = await client.query(
+                    `SELECT COUNT(*)::int AS count
+                     FROM users
+                     WHERE role = 'admin' AND is_active = TRUE
+                       AND id <> $1`,
+                    [targetId]
+                );
+                if (
+                    targetResult.rows[0].role === "admin" &&
+                    targetResult.rows[0].isActive &&
+                    remainingAdmins.rows[0].count === 0
+                ) {
+                    await client.query("ROLLBACK");
+                    return { ok: false, status: 400, message: "At least one active administrator must remain." };
+                }
+            }
+
+            const updated = await client.query(
+                `UPDATE users SET role = $2, is_active = $3
+                 WHERE id = $1
+                 RETURNING id::text AS id, name,
+                           contact_no AS "contactNo", role,
+                           is_active AS "isActive"`,
+                [targetId, role, isActive]
+            );
+            await client.query("COMMIT");
+            return { ok: true, user: updated.rows[0] };
         } catch (error) {
+            await client.query("ROLLBACK");
             throw error;
+        } finally {
+            client.release();
         }
+    };
+
+    updateUserProfile = async (userId, name, about) => {
+        await pool.query(
+            `UPDATE users SET name = $2, about = $3 WHERE id = $1`,
+            [userId, name, about]
+        );
+    };
+
+    updateProfilePicture = async (userId, img) => {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const result = await client.query(
+                `UPDATE users SET img = $2 WHERE id = $1
+                 RETURNING img, contact_no AS "contactNo"`,
+                [userId, img]
+            );
+            if (result.rowCount === 0) {
+                await client.query("ROLLBACK");
+                return null;
+            }
+
+            await client.query(
+                `UPDATE chat_messages SET img = $1 WHERE from_contact_no = $2`,
+                [img, result.rows[0].contactNo]
+            );
+            await client.query("COMMIT");
+            return result.rows[0];
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+    };
+
+    updateUserStatus = async (userId, status) => {
+        await pool.query(
+            `UPDATE users SET status = $2 WHERE id = $1`,
+            [userId, status]
+        );
+    };
+
+    fetchUsersByIds = async (ids) => {
+        const result = await pool.query(
+            `SELECT id::text AS id FROM users
+             WHERE id = ANY($1::bigint[]) AND is_active = TRUE`,
+            [ids]
+        );
+        return result.rows.map((row) => row.id);
+    };
+
+    createGroup = async (name, creatorId, memberIds) => {
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const groupResult = await client.query(
+                `INSERT INTO chat_groups (name, created_by)
+                 VALUES ($1, $2)
+                 RETURNING id, name`,
+                [name, creatorId]
+            );
+            const group = groupResult.rows[0];
+            await client.query(
+                `INSERT INTO chat_group_members (group_id, user_id)
+                 SELECT $1, user_id
+                 FROM unnest($2::bigint[]) AS members(user_id)
+                 ON CONFLICT DO NOTHING`,
+                [group.id, [...new Set([String(creatorId), ...memberIds])]]
+            );
+            await client.query("COMMIT");
+            return group;
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+    };
+
+    fetchGroupsForUser = async (userId) => {
+        const result = await pool.query(
+            `SELECT g.id::text AS id, g.name
+             FROM chat_groups g
+             JOIN chat_group_members m ON m.group_id = g.id
+             WHERE m.user_id = $1
+             ORDER BY g.name`,
+            [userId]
+        );
+        return result.rows;
+    };
+
+    fetchGroupMembers = async (groupId) => {
+        const result = await pool.query(
+            `SELECT u.id::text AS id,
+                    u.contact_no AS "contactNo",
+                    u.name,
+                    u.img
+             FROM chat_group_members m
+             JOIN users u ON u.id = m.user_id
+             WHERE m.group_id = $1 AND u.is_active = TRUE`,
+            [groupId]
+        );
+        return result.rows;
+    };
+
+    isGroupMember = async (groupId, userId) => {
+        const result = await pool.query(
+            `SELECT 1
+             FROM chat_group_members m
+             JOIN users u ON u.id = m.user_id
+             WHERE m.group_id = $1 AND m.user_id = $2 AND u.is_active = TRUE`,
+            [groupId, userId]
+        );
+        return result.rowCount > 0;
+    };
+
+    fetchGroupMessages = async (groupId, userId) => {
+        if (!(await this.isGroupMember(groupId, userId))) {
+            throw new Error("You are not a member of this group.");
+        }
+
+        const result = await pool.query(
+            `SELECT m.id::text AS id,
+                    u.contact_no AS "from",
+                    u.name AS "fromName",
+                    u.img,
+                    m.type,
+                    m.message,
+                    m.datetime,
+                    m.group_id::text AS "groupId"
+             FROM chat_group_messages m
+             JOIN users u ON u.id = m.sender_id
+             WHERE m.group_id = $1
+             ORDER BY m.datetime, m.id`,
+            [groupId]
+        );
+        return result.rows;
+    };
+
+    appendGroupMessage = async (groupId, senderId, data) => {
+        const result = await pool.query(
+            `INSERT INTO chat_group_messages (group_id, sender_id, type, message, datetime)
+             VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_TIMESTAMP))
+             RETURNING id::text AS id, datetime`,
+            [
+                groupId,
+                senderId,
+                data.type || "text",
+                data.message,
+                data.datetime || null,
+            ]
+        );
+        return result.rows[0];
+    };
+
+    fetchChatMessage = async (from, to) => {
+        const result = await pool.query(
+            `SELECT id::text AS id,
+                    from_contact_no AS "from",
+                    to_contact_no AS "to",
+                    img,
+                    type,
+                    message,
+                    datetime,
+                    CASE
+                        WHEN read_at IS NOT NULL THEN 'read'
+                        WHEN delivered_at IS NOT NULL THEN 'delivered'
+                        ELSE 'sent'
+                    END AS status
+             FROM chat_messages
+             WHERE (from_contact_no = $1 AND to_contact_no = $2)
+                OR (from_contact_no = $2 AND to_contact_no = $1)
+             ORDER BY datetime, id`,
+            [from, to]
+        );
+        return result.rows;
+    };
+
+    markMessagesDelivered = async (fromContactNo, toContactNo) => {
+        const result = await pool.query(
+            `UPDATE chat_messages
+             SET delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+             WHERE from_contact_no = $1
+               AND to_contact_no = $2
+               AND delivered_at IS NULL
+             RETURNING id::text AS id`,
+            [fromContactNo, toContactNo]
+        );
+        return result.rows;
+    };
+
+    markMessagesRead = async (fromContactNo, toContactNo) => {
+        const result = await pool.query(
+            `UPDATE chat_messages
+             SET delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP),
+                 read_at = CURRENT_TIMESTAMP
+             WHERE from_contact_no = $1
+               AND to_contact_no = $2
+               AND read_at IS NULL
+             RETURNING id::text AS id`,
+            [fromContactNo, toContactNo]
+        );
+        return result.rows;
+    };
+
+    searchChatsForUser = async (userId, contactNo, query) => {
+        const result = await pool.query(
+            `SELECT *
+             FROM (
+                 SELECT NULL::text AS id,
+                        'direct'::text AS "chatType",
+                        other.contact_no AS "conversationId",
+                        other.contact_no AS "contactNo",
+                        other.name AS "conversationName",
+                        other.img,
+                        NULL::text AS message,
+                        NULL::timestamptz AS datetime
+                 FROM users other
+                 WHERE other.id <> $1
+                   AND other.is_active = TRUE
+                   AND POSITION(LOWER($3) IN LOWER(other.name)) > 0
+
+                 UNION ALL
+
+                 SELECT m.id::text AS id,
+                        'direct'::text AS "chatType",
+                        other.contact_no AS "conversationId",
+                        other.contact_no AS "contactNo",
+                        other.name AS "conversationName",
+                        other.img,
+                        LEFT(m.message, 120) AS message,
+                        m.datetime
+                 FROM chat_messages m
+                 JOIN users other
+                   ON other.contact_no = CASE
+                       WHEN m.from_contact_no = $2 THEN m.to_contact_no
+                       ELSE m.from_contact_no
+                   END
+                 WHERE other.is_active = TRUE
+                   AND (m.from_contact_no = $2 OR m.to_contact_no = $2)
+                   AND m.type = 'text'
+                   AND POSITION(LOWER($3) IN LOWER(m.message)) > 0
+
+                 UNION ALL
+
+                 SELECT NULL::text AS id,
+                        'group'::text AS "chatType",
+                        g.id::text AS "conversationId",
+                        NULL::text AS "contactNo",
+                        g.name AS "conversationName",
+                        NULL::text AS img,
+                        NULL::text AS message,
+                        NULL::timestamptz AS datetime
+                 FROM chat_groups g
+                 JOIN chat_group_members gm ON gm.group_id = g.id
+                 WHERE gm.user_id = $1
+                   AND POSITION(LOWER($3) IN LOWER(g.name)) > 0
+
+                 UNION ALL
+
+                 SELECT m.id::text AS id,
+                        'group'::text AS "chatType",
+                        g.id::text AS "conversationId",
+                        NULL::text AS "contactNo",
+                        g.name AS "conversationName",
+                        NULL::text AS img,
+                        LEFT(m.message, 120) AS message,
+                        m.datetime
+                 FROM chat_group_messages m
+                 JOIN chat_groups g ON g.id = m.group_id
+                 JOIN chat_group_members gm
+                   ON gm.group_id = g.id AND gm.user_id = $1
+                 WHERE m.type = 'text'
+                   AND POSITION(LOWER($3) IN LOWER(m.message)) > 0
+             ) AS matches
+             ORDER BY datetime DESC NULLS LAST, "conversationName"
+             LIMIT 50`,
+            [userId, contactNo, query]
+        );
+        return result.rows;
     };
 
     appendChat = async (data) => {
-        try {
-            const chat = new Chat(data)
-            const result = await chat.save()
-            return result;
-        } catch (error) {
-            console.error(error.message)
-            throw error;
-        }
+        const result = await pool.query(
+            `INSERT INTO chat_messages
+                (from_contact_no, to_contact_no, img, type, message, datetime)
+             VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_TIMESTAMP))
+             RETURNING id::text AS id, datetime, delivered_at, read_at`,
+            [
+                data.from,
+                data.to,
+                data.img,
+                data.type || "text",
+                data.message,
+                data.datetime || null,
+            ]
+        );
+        return result.rows[0];
     };
 }
 
