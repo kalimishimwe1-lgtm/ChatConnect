@@ -1,0 +1,14 @@
+# Docker Compose Configuration for ChatConnect Application
+
+version: '2.24'
+
+services:
+  chat-connect:
+    # Build the Docker image using the Dockerfile in the current directory
+    build: .
+    ports:
+      # Map host port 3000 to container port 3000
+      - 3000:3000
+    # Load environment variables from the .env file
+    env_file:
+      - .env
